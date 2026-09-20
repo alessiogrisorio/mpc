@@ -1,0 +1,9 @@
+# Puthon
+_pycache_/
+*.pyc
+env/
+
+# File generati da acados
+c_generated_code/
+acados_ocp.json
+acados_sim.json
