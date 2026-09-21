@@ -66,7 +66,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref):
     ocp.constraints.ubx = np.array([10.0, 0.4])
 
     # Terminal state bounds
-    ocp.constraints.idxbx_e = ocp.constraints.idxbu.copy()
+    ocp.constraints.idxbx_e = ocp.constraints.idxbx.copy()
     ocp.constraints.lbx_e = ocp.constraints.lbx.copy()
     ocp.constraints.ubx_e = ocp.constraints.ubx.copy()
 
