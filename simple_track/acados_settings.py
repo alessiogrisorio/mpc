@@ -25,8 +25,8 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref):
     ocp.cost.cost_type = 'LINEAR_LS'
     ocp.cost.cost_type_e = 'LINEAR_LS'
 
-    Q = np.diag([0.0, 10.0, 10.0, 1.0, 1.0])
-    R = np.diag([1.0, 0.1])
+    Q = np.diag([0.0, 20.0, 200.0, 20.0, 50.0])
+    R = np.diag([1.0, 0.2])
 
     Qe = Q.copy()
 

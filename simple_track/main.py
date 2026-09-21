@@ -13,8 +13,8 @@ lf = 1.2
 lr = 1.5
 
 # MPC and simulation settings
-Tf = 1.0
-N = 50
+Tf = 2.0
+N = 100
 dt = Tf / N
 
 Tsim = 10.0
@@ -54,6 +54,8 @@ for j in range(N):
 simX = np.zeros((Nsim + 1, nx))     # 501 x 5
 simU = np.zeros((Nsim, nu))         # 500 x 5
 solve_time = np.zeros(Nsim)         # 500 x 1
+
+simX[0, :] = x0
 
 # Simulation
 for i in range(Nsim):
