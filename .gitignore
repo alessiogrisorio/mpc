@@ -4,6 +4,7 @@ _pycache_/
 env/
 
 # File generati da acados
+codegen_*/
 c_generated_code/
 acados_ocp.json
 acados_sim.json
