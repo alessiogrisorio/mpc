@@ -58,7 +58,7 @@ for j in range(N):
     acados_solver.set(j, "u", np.zeros(nu))
 
 simX = np.zeros((Nsim + 1, nx))     # 501 x 5
-simU = np.zeros((Nsim, nu))         # 500 x 5
+simU = np.zeros((Nsim, nu))         # 500 x 2
 solve_time = np.zeros(Nsim)         # 500 x 1
 
 simX[0, :] = x0
