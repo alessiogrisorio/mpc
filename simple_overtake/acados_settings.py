@@ -15,7 +15,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     Y_H = SX.sym("Y_H")
     model.p = vertcat(X_H, Y_H)
 
-    r_E = 0.5 * np.hypot(lf+lr, 2.20)
+    r_E = 0.5 * np.hypot(4.68, 2.20)
     r_H = 0.5 * np.hypot(4.28, 1.80)
     safety_d = r_E + r_H
 
@@ -28,7 +28,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     model.con_h_expr_e = vertcat(separation)
 
     ocp.model = model
-    ocp.parameters_values = np.asarray(human_pos, dtype=float)
+    ocp.parameter_values = np.asarray(human_pos, dtype=float)
 
     # Dimensions
     nx = model.x.rows()

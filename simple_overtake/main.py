@@ -26,11 +26,13 @@ v_ref = 5.0
 x0 = np.array([0.0, 2.0, 0.0, 2.0, 0.0])
 
 # Initial human state
-X_H_current = 12.0
+X_H_initial = 12.0
+v_H = 3.0
+human_pos = np.array([X_H_initial, 0.0])
 
 # MPC solver
 model, acados_solver = acados_settings(
-    Tf, N, lf, lr, x0, v_ref
+    Tf, N, lf, lr, x0, v_ref, human_pos
 )
 
 nx = model.x.rows()     # 5
@@ -39,6 +41,7 @@ nu = model.u.rows()     # 2
 # Vehicle simulator
 sim = AcadosSim()
 sim.model = model
+sim.parameter_values = human_pos.copy()
 
 sim.solver_options.T = dt
 sim.solver_options.integrator_type = "ERK"
@@ -69,8 +72,9 @@ for i in range(Nsim):
     acados_solver.set(0, "ubx", x_current)
 
     # Aggiorno posizione human
+    X_H_current = X_H_initial + v_H * i * dt
     for j in range(N + 1):
-        human_prediction = np.array([X_H_current + v_H * j + dt, 0.0])
+        human_prediction = np.array([X_H_current + v_H * j * dt, 0.0])
         acados_solver.set(j, "p", human_prediction)
 
     # Solve ocp
