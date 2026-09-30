@@ -14,20 +14,26 @@ lr = 1.5
 
 # MPC and simulation settings
 Tf = 3.0
-N = 150
-dt = Tf / N
+f_mpc = 50
+dt_ctrl = 1.0 / f_mpc
+N = int(round(Tf / dt_ctrl))
+dt_ocp = Tf / N
 
+# Simulation settings
 Tsim = 20.0
+f_sim = 50
+dt = 1.0 / f_sim
 Nsim = int(round(Tsim / dt))
 
+# Ego reference parameters
 v_ref = 5.0
 
-# Initial state: [X, Y, psi, v, delta]
-x0 = np.array([0.0, 0.0, 0.0, 2.0, 0.0])
+# Initial ego state: [X, Y, psi, v, delta]
+x0 = np.array([0.0, 0.0, 0.0, 5.0, 0.0])
 
 # Initial human state
 X_H_initial = 12.0
-v_H = 3.0
+v_H = 2.0
 human_pos = np.array([X_H_initial, 0.0])
 
 # MPC solver
@@ -50,12 +56,25 @@ sim.solver_options.num_steps = 3
 
 acados_integrator = AcadosSimSolver(sim)
 
+
+
 # Inizializzazione
-for j in range(N + 1):
-    acados_solver.set(j, "x", x0)
+x_guess = x0.copy()
+u_guess = np.zeros(2)
+
+acados_solver.set(0, "x", x_guess)
 
 for j in range(N):
-    acados_solver.set(j, "u", np.zeros(nu))
+    acados_solver.set(j, "u", u_guess)
+    acados_integrator.set("x", x_guess)
+    acados_integrator.set("u", u_guess)
+    status_sim = acados_integrator.solve()
+    if status_sim != 0:
+        raise RuntimeError(f"Initial guess integration failed: {status_sim}")
+
+    x_guess = acados_integrator.get("x")
+    acados_solver.set(j + 1, "x", x_guess)
+
 
 simX = np.zeros((Nsim + 1, nx))     # 501 x 5
 simU = np.zeros((Nsim, nu))         # 500 x 2
@@ -82,7 +101,7 @@ for i in range(Nsim):
     status = acados_solver.solve()
     solve_time[i] = time.perf_counter() - start
 
-    if status != 0:
+    if status not in (0, 2):
         acados_solver.print_statistics()
         raise RuntimeError(
             f"OCP solver failed at step {i}, t = {i * dt:.3f} s, status = {status}"
@@ -98,7 +117,7 @@ for i in range(Nsim):
 
     status = acados_integrator.solve()
 
-    if status != 0:
+    if status not in (0, 2):
         raise RuntimeError(f"Integrator failed at step {i}, status = {status}")
 
     simX[i + 1, :] = acados_integrator.get("x")

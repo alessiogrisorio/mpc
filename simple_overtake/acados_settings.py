@@ -43,8 +43,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     ocp.cost.cost_type = 'LINEAR_LS'
     ocp.cost.cost_type_e = 'LINEAR_LS'
 
-    # X, Y, PSI, V, delta
-    Q = np.diag([0.0, 1.0, 1.0, 100.0, 1.0])
+    Q = np.diag([0.0, 1.0, 10.0, 1.0, 0.0])
     R = np.diag([1.0, 0.2])
 
     Qe = Q.copy()
@@ -80,14 +79,36 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     ocp.constraints.ubu = np.array([0.087, 2.5])
 
     # State bounds
-    ocp.constraints.idxbx = np.array([3, 4])
-    ocp.constraints.lbx = np.array([0.0, -0.4])
-    ocp.constraints.ubx = np.array([10.0, 0.4])
+    ocp.constraints.idxbx = np.array([1, 3, 4])
+    ocp.constraints.lbx = np.array([0.0, 0.0, -0.4])
+    ocp.constraints.ubx = np.array([100, 10.0, 0.4])
+
+    # Soft constraint
+    ocp.constraints.idxsbx = np.array([0])
+    ocp.constraints.lsbx = np.array([0.0])
+    ocp.constraints.usbx = np.array([0.0])
 
     # Terminal state bounds
     ocp.constraints.idxbx_e = ocp.constraints.idxbx.copy()
     ocp.constraints.lbx_e = ocp.constraints.lbx.copy()
     ocp.constraints.ubx_e = ocp.constraints.ubx.copy()
+
+    ocp.constraints.idxsbx_e = np.array([0])
+    ocp.constraints.lsbx_e = np.array([0.0])
+    ocp.constraints.usbx_e = np.array([0.0])
+
+    # Penalty for entering Y < 0
+    q_right = 50.0
+
+    ocp.cost.zl = np.array([0.0])
+    ocp.cost.zu = np.array([0.0])
+    ocp.cost.Zl = np.array([q_right])
+    ocp.cost.Zu = np.array([q_right])
+
+    ocp.cost.zl_e = ocp.cost.zl.copy()
+    ocp.cost.zu_e = ocp.cost.zu.copy()
+    ocp.cost.Zl_e = ocp.cost.Zl.copy()
+    ocp.cost.Zu_e = ocp.cost.Zu.copy()
 
     # Nonlinear separation bounds
     ocp.constraints.lh = np.array([0.0])
@@ -104,10 +125,13 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM"
     ocp.solver_options.nlp_solver_type = "SQP"
     ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
+    ocp.solver_options.nlp_solver_max_iter = 200
 
     ocp.solver_options.integrator_type = "ERK"
     ocp.solver_options.sim_method_num_stages = 4
     ocp.solver_options.sim_method_num_steps = 3
+
+    ocp.code_gen_options.code_export_directory = "codegen_ocp"
 
     # Create solver
     solver = AcadosOcpSolver(ocp)
