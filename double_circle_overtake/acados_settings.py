@@ -36,6 +36,10 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     X_E = model.x[0]
     Y_E = model.x[1]
     PSI_E = model.x[2]
+    V_E = model.x[3]
+    DELTA_E = model.x[4]
+    STEERING_RATE = model.u[0]
+    ACCELERATION = model.u[1]
 
     rho_E = np.hypot(EGO_LENGTH / 4.0, EGO_WIDTH / 2.0)
     rho_H = np.hypot(HUMAN_LENGTH / 4.0, HUMAN_WIDTH / 2.0)
@@ -61,6 +65,8 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
         separation_rr,
     )
 
+    lane_error = (Y_E - LANE_CENTER_1) * (Y_E - LANE_CENTER_2) / (LANE_HALF_DISTANCE**2)
+
     model.con_h_expr = separation
     model.con_h_expr_e = separation
 
@@ -70,13 +76,15 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     # Dimensions
     nx = model.x.rows()
     nu = model.u.rows()
-    ny = nx + nu
 
     # Cost
-    ocp.cost.cost_type = 'LINEAR_LS'
-    ocp.cost.cost_type_e = 'LINEAR_LS'
+    ocp.cost.cost_type = 'NONLINEAR_LS'
+    ocp.cost.cost_type_e = 'NONLINEAR_LS'
 
-    Q = np.diag([0.0, 2.0, 30.0, 30.0, 0.0])
+    model.cost_y_expr = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, STEERING_RATE, ACCELERATION)
+    model.cost_y_expr_e = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E)
+
+    Q = np.diag([0.0, 2.0, 10.0, 50.0, 0.0])
     R = np.diag([1.0, 0.2])
 
     Qe = Q.copy()
@@ -84,22 +92,22 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     ocp.cost.W = scipy.linalg.block_diag(Q, R)
     ocp.cost.W_e = Qe
 
-    Vx = np.zeros((ny, nx))
-    Vx[:nx, :] = np.eye(nx)
-    ocp.cost.Vx = Vx
-
-    Vu = np.zeros((ny, nu))
-    Vu[nx:, :] = np.eye(nu)
-    ocp.cost.Vu = Vu
-
-    ocp.cost.Vx_e = np.eye(nx)
-
     ocp.cost.yref = np.array([
-        0.0, 4.0, 0.0, v_ref, 0.0, 0.0, 0.0
+        0.0,        # X
+        0.0,        # lane error
+        0.0,        # psi
+        v_ref,      # v
+        0.0,        # delta
+        0.0,        # steering rate
+        0.0,        # acceleration
     ])
 
     ocp.cost.yref_e = np.array([
-        0.0, 4.0, 0.0, v_ref, 0.0
+        0.0,        # X
+        0.0,        # lane error
+        0.0,        # psi
+        v_ref,      # v
+        0.0,        # delta
     ])
 
     # Input bounds
