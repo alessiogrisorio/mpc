@@ -13,17 +13,17 @@ lf = 1.2
 lr = 1.5
 
 # MPC and simulation settings
-Tf = 2.0
-N = 100
+Tf = 3.0
+N = 150
 dt = Tf / N
 
-Tsim = 10.0
+Tsim = 20.0
 Nsim = int(round(Tsim / dt))
 
 v_ref = 5.0
 
 # Initial state: [X, Y, psi, v, delta]
-x0 = np.array([0.0, 2.0, 0.0, 2.0, 0.0])
+x0 = np.array([0.0, 0.0, 0.0, 2.0, 0.0])
 
 # Initial human state
 X_H_initial = 12.0
@@ -150,7 +150,7 @@ for ax in [axes[0, 1], *axes[1, :], *axes[2, :]]:
 
 fig.tight_layout()
 
-animation = animate_simulation(t_x, simX)
+animation = animate_simulation(t_x, simX, X_H_initial, v_H)
 video_path = Path(__file__).resolve().parent / "simulation.mp4"
 animation.save(
     str(video_path),

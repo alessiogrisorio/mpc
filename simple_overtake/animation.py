@@ -4,7 +4,10 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Polygon
 
-def animate_simulation(t, simX, length=4.68, width=2.2):
+def animate_simulation(
+    t, simX, X_H_initial, v_H,
+    length=4.68, width=2.2, human_length=4.28, human_width=1.8,
+):
 
     fig, ax = plt.subplots(figsize=(10, 5))
 
@@ -15,7 +18,7 @@ def animate_simulation(t, simX, length=4.68, width=2.2):
 
     # Reference path and traveled trajectory
     ax.axhline(0.0, color="black", linestyle="--", label="Reference")
-    trajectory, = ax.plot([], [], color="tab:blue", label="Trajectory")
+    trajectory, = ax.plot([], [], color="tab:blue", label="Ego trajectory")
 
     # Vehicle outline relative to its center
     corners = np.array([
@@ -31,8 +34,22 @@ def animate_simulation(t, simX, length=4.68, width=2.2):
         facecolor="tab:blue",
         edgecolor="black",
         alpha=0.7,
+        label="Ego",
     )
     ax.add_patch(vehicle)
+
+    human_corners = np.array([
+        [-human_length / 2, -human_width / 2],
+        [ human_length / 2, -human_width / 2],
+        [ human_length / 2,  human_width / 2],
+        [-human_length / 2,  human_width / 2],
+    ])
+    human = Polygon(
+        human_corners, closed=True, facecolor="tab:orange",
+        edgecolor="black", alpha=0.7, label="Human",
+    )
+    ax.add_patch(human)
+    human_heading, = ax.plot([], [], color="black", linewidth=2)
 
     heading, = ax.plot([], [], color="black", linewidth=2)
     title = ax.set_title("")
@@ -47,6 +64,9 @@ def animate_simulation(t, simX, length=4.68, width=2.2):
     def update(i):
 
         X, Y, psi, v, delta = simX[i]
+        X_H = X_H_initial + v_H * t[i]
+        human.set_xy(human_corners + np.array([X_H, 0.0]))
+        human_heading.set_data([X_H, X_H + human_length / 2], [0.0, 0.0])
 
         # Rotate the rectangle and translate it to the vehicle position
         rotation = np.array([
@@ -64,7 +84,10 @@ def animate_simulation(t, simX, length=4.68, width=2.2):
 
         trajectory.set_data(simX[:i + 1, 0], simX[:i + 1, 1])
 
-        ax.set_xlim(X - 10.0, X + 20.0)
+        ax.set_xlim(
+            min(X - 10.0, X_H - human_length / 2 - 5.0),
+            max(X + 20.0, X_H + human_length / 2 + 5.0),
+        )
 
         title.set_text(
             f"t = {t[i]:.2f} s   |   "
@@ -72,7 +95,7 @@ def animate_simulation(t, simX, length=4.68, width=2.2):
             f"delta = {np.rad2deg(delta):.1f}°"
         )
 
-        return vehicle, heading, trajectory, title
+        return vehicle, human, heading, human_heading, trajectory, title
 
     update(0)
 
