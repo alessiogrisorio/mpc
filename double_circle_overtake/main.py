@@ -1,12 +1,12 @@
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
 from acados_settings import acados_settings
-from animation import animate_simulation
-from pathlib import Path
+from animation import animate_simulation, plot_results
+import matplotlib.pyplot as plt
+
 
 # Vehicle parameters
 lf = 1.2
@@ -25,16 +25,15 @@ f_sim = 50
 dt = 1.0 / f_sim
 Nsim = int(round(Tsim / dt))
 
-# Ego reference parameters
+# Ego: [X, Y, psi, v, delta]
 v_ref = 5.0
-
-# Initial ego state: [X, Y, psi, v, delta]
 x0 = np.array([0.0, 0.0, 0.0, 5.0, 0.0])
 
-# Initial human state
+# Human
 X_H_initial = 12.0
+Y_H_initial = 0.0
 v_H = 2.0
-human_pos = np.array([X_H_initial, 0.0])
+human_pos = np.array([X_H_initial, Y_H_initial])
 
 # MPC solver
 model, acados_solver = acados_settings(
@@ -48,14 +47,11 @@ nu = model.u.rows()     # 2
 sim = AcadosSim()
 sim.model = model
 sim.parameter_values = human_pos.copy()
-
 sim.solver_options.T = dt
 sim.solver_options.integrator_type = "ERK"
 sim.solver_options.num_stages = 4
 sim.solver_options.num_steps = 3
-
 acados_integrator = AcadosSimSolver(sim)
-
 
 
 # Inizializzazione
@@ -75,11 +71,10 @@ for j in range(N):
     x_guess = acados_integrator.get("x")
     acados_solver.set(j + 1, "x", x_guess)
 
-
+# Simulation data
 simX = np.zeros((Nsim + 1, nx))     # 501 x 5
 simU = np.zeros((Nsim, nu))         # 500 x 2
 solve_time = np.zeros(Nsim)         # 500 x 1
-
 simX[0, :] = x0
 
 # Simulation
@@ -87,13 +82,14 @@ for i in range(Nsim):
 
     x_current = simX[i, :]
 
+    # Current ego state
     acados_solver.set(0, "lbx", x_current)
     acados_solver.set(0, "ubx", x_current)
 
     # Aggiorno posizione human
     X_H_current = X_H_initial + v_H * i * dt
     for j in range(N + 1):
-        human_prediction = np.array([X_H_current + v_H * j * dt, 0.0])
+        human_prediction = np.array([X_H_current + v_H * j * dt_ocp, Y_H_initial])
         acados_solver.set(j, "p", human_prediction)
 
     # Solve ocp
@@ -111,10 +107,9 @@ for i in range(Nsim):
     u0 = acados_solver.get(0, "u")
     simU[i, :] = u0
 
-    # Vehicle sim
+    # Ego simulator
     acados_integrator.set("x", x_current)
     acados_integrator.set("u", u0)
-
     status = acados_integrator.solve()
 
     if status not in (0, 2):
@@ -127,55 +122,24 @@ for i in range(Nsim):
 print(f"\n\nMean OCP solve time: {1e3 * solve_time.mean():.3f} ms")
 print(f"Maximum OCP solve time: {1e3 * solve_time.max():.3f} ms")
 
-# Plot results
 t_x = np.arange(Nsim + 1) * dt
 t_u = np.arange(Nsim) * dt
 
-fig, axes = plt.subplots(3, 2, figsize=(12, 9))
-
-axes[0, 0].plot(simX[:, 0], simX[:, 1], label="Ego")
-axes[0, 0].axhline(0.0, color="black", linestyle="--", label="Reference")
-axes[0, 0].set_xlabel("X [m]")
-axes[0, 0].set_ylabel("Y [m]")
-axes[0, 0].set_title("Trajectory")
-axes[0, 0].legend()
-
-axes[0, 1].plot(t_x, simX[:, 3], label="Ego")
-axes[0, 1].axhline(
-    v_ref, color="black", linestyle="--", label="Reference"
-)
-axes[0, 1].set_ylabel("Speed [m/s]")
-axes[0, 1].legend()
-
-axes[1, 0].plot(t_x, np.rad2deg(simX[:, 2]))
-axes[1, 0].set_ylabel("Heading [deg]")
-
-axes[1, 1].plot(t_x, np.rad2deg(simX[:, 4]))
-axes[1, 1].set_ylabel("Steering angle [deg]")
-
-axes[2, 0].step(
-    t_u, np.rad2deg(simU[:, 0]), where="post"
-)
-axes[2, 0].set_ylabel("Steering rate [deg/s]")
-
-axes[2, 1].step(t_u, simU[:, 1], where="post")
-axes[2, 1].set_ylabel("Acceleration [m/s²]")
-
-for ax in axes.flat:
-    ax.grid(True)
-
-for ax in [axes[0, 1], *axes[1, :], *axes[2, :]]:
-    ax.set_xlabel("Time [s]")
-
-fig.tight_layout()
-
-animation = animate_simulation(t_x, simX, X_H_initial, v_H)
-video_path = Path(__file__).resolve().parent / "simulation.mp4"
-animation.save(
-    str(video_path),
-    writer="ffmpeg",
-    fps=1.0 / (t_x[1] - t_x[0]),
-    dpi=150,
+plot_results(
+    t_x,
+    t_u,
+    simX,
+    simU,
+    v_ref,
+    v_H,
 )
 
+animation = animate_simulation(
+    t_x,
+    simX,
+    X_H_initial,
+    Y_H_initial,
+    v_H,
+    save=True,
+)
 plt.show()
