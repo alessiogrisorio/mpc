@@ -30,7 +30,8 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     model = ego_model(lf, lr)
     X_H = SX.sym("X_H")
     Y_H = SX.sym("Y_H")
-    model.p = vertcat(X_H, Y_H)
+    RETURN_ON = SX.sym("RETURN_ON")
+    model.p = vertcat(X_H, Y_H, RETURN_ON)
 
     # Double circle constraints
     X_E = model.x[0]
@@ -65,13 +66,17 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
         separation_rr,
     )
 
+    # Lane error
     lane_error = (Y_E - LANE_CENTER_1) * (Y_E - LANE_CENTER_2) / (LANE_HALF_DISTANCE**2)
+
+    # Left lane penalty
+    left_lane_penalty = RETURN_ON * (Y_E - LANE_CENTER_1)**2 / ((Y_E - LANE_CENTER_2)**2 + (Y_E - LANE_CENTER_2)**2 + 1e-6)
 
     model.con_h_expr = separation
     model.con_h_expr_e = separation
 
     ocp.model = model
-    ocp.parameter_values = np.asarray(human_pos, dtype=float)
+    ocp.parameter_values = np.asarray([human_pos[0], human_pos[1], 0.0])
 
     # Dimensions
     nx = model.x.rows()
@@ -81,11 +86,22 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     ocp.cost.cost_type = 'NONLINEAR_LS'
     ocp.cost.cost_type_e = 'NONLINEAR_LS'
 
-    model.cost_y_expr = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, STEERING_RATE, ACCELERATION)
-    model.cost_y_expr_e = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E)
+    model.cost_y_expr = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, left_lane_penalty, STEERING_RATE, ACCELERATION)
+    model.cost_y_expr_e = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, left_lane_penalty)
 
-    Q = np.diag([0.0, 2.0, 10.0, 50.0, 0.0])
-    R = np.diag([1.0, 0.2])
+    Q = np.diag([
+        0.0,     # X
+        2.0,     # lane error
+        10.0,    # psi
+        50.0,    # velocity
+        0.0,     # delta
+        0.0,  # left lane penalty
+    ])
+
+    R = np.diag([
+        1.0,     # steering rate
+        0.2,     # acceleration
+    ])
 
     Qe = Q.copy()
 
@@ -98,6 +114,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
         0.0,        # psi
         v_ref,      # v
         0.0,        # delta
+        0.0,        # left lane penalty
         0.0,        # steering rate
         0.0,        # acceleration
     ])
@@ -108,6 +125,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
         0.0,        # psi
         v_ref,      # v
         0.0,        # delta
+        0.0,        # left lane penalty
     ])
 
     # Input bounds

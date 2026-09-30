@@ -28,6 +28,7 @@ Nsim = int(round(Tsim / dt))
 # Ego: [X, Y, psi, v, delta]
 v_ref = 5.0
 x0 = np.array([0.0, 0.0, 0.0, 5.0, 0.0])
+pass_margin = 8
 
 # Human
 X_H_initial = 12.0
@@ -44,9 +45,10 @@ nx = model.x.rows()     # 5
 nu = model.u.rows()     # 2
 
 # Vehicle simulator
+return_on = 0.0
 sim = AcadosSim()
 sim.model = model
-sim.parameter_values = human_pos.copy()
+sim.parameter_values = np.array([X_H_initial, Y_H_initial, return_on])
 sim.solver_options.T = dt
 sim.solver_options.integrator_type = "ERK"
 sim.solver_options.num_stages = 4
@@ -88,8 +90,14 @@ for i in range(Nsim):
 
     # Aggiorno posizione human
     X_H_current = X_H_initial + v_H * i * dt
+
+    # Activete return to right lane
+    if x_current[0] > X_H_current + pass_margin:
+        return_on = 1.0
+
+    # Human prediction over MPC horizon
     for j in range(N + 1):
-        human_prediction = np.array([X_H_current + v_H * j * dt_ocp, Y_H_initial])
+        human_prediction = np.array([X_H_current + v_H * j * dt_ocp, Y_H_initial, return_on])
         acados_solver.set(j, "p", human_prediction)
 
     # Solve ocp
