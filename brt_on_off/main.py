@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 brt_type = "euclidean.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
+V_thr = 0.7
+HJ_STAGES = 3
 
 # Vehicle parameters
 lf = 1.2
@@ -53,7 +55,14 @@ nu = model.u.rows()     # 2
 return_on = 0.0
 sim = AcadosSim()
 sim.model = model
-sim.parameter_values = np.array([X_H_initial, Y_H_initial, return_on])
+sim.parameter_values = np.array([
+    X_H_initial,
+    Y_H_initial,
+    return_on,
+    0.0,
+    0.0,
+    1.0,
+])
 sim.solver_options.T = dt
 sim.solver_options.integrator_type = "ERK"
 sim.solver_options.num_stages = 4
@@ -84,6 +93,9 @@ simX[0, :] = x0
 simV = np.full(Nsim, np.nan)                # 500 x 1
 simGradV = np.full((Nsim, 6), np.nan)       # 500 x 6
 simInsideGrid = np.zeros(Nsim, dtype=bool)  # 500 x 1
+simHJActive = np.zeros(Nsim, dtype=bool)        # 500 x 1
+simHJResidual = np.full(Nsim, np.nan)
+simHJSlack = np.zeros(Nsim)
 
 # Simulation
 for i in range(Nsim):
@@ -108,11 +120,14 @@ for i in range(Nsim):
 
     # Valutazione BRT
     simV[i], simGradV[i], simInsideGrid[i] = brt.evaluate(relative_state)
-    if simInsideGrid[i]:
+    hj_active = simInsideGrid[i] and simV[i] <= V_thr
+    simHJActive[i] = hj_active
+    if hj_active:
         M_HJ, b_HJ = hj_coefficients(relative_state, simGradV[i], brt.dynamics_parameters)
     else:
         M_HJ = np.zeros(2)
         b_HJ = 1.0
+
 
     # Activete return to right lane
     if x_current[0] > X_H_current + pass_margin:
@@ -120,8 +135,17 @@ for i in range(Nsim):
 
     # Human prediction over MPC horizon
     for j in range(N + 1):
-        human_prediction = np.array([X_H_current + v_H * j * dt_ocp, Y_H_initial, return_on])
-        acados_solver.set(j, "p", human_prediction)
+        if hj_active and j < HJ_STAGES:
+            hj_parameters = [M_HJ[0], M_HJ[1], b_HJ]
+        else:
+            hj_parameters = [0.0, 0.0, 1.0]
+        parameters = np.array([
+            X_H_current + v_H * j * dt_ocp,
+            Y_H_initial,
+            return_on,
+            *hj_parameters,
+        ])
+        acados_solver.set(j, "p", parameters)
 
     # Solve ocp
     start = time.perf_counter()
@@ -136,6 +160,9 @@ for i in range(Nsim):
     # First optimal input
     u0 = acados_solver.get(0, "u")
     simU[i, :] = u0
+    if hj_active:
+        simHJResidual[i] = M_HJ @ u0 + b_HJ
+    simHJSlack[i] = acados_solver.get(0, "sl")[0]
 
     # Ego simulator
     acados_integrator.set("x", x_current)
@@ -158,6 +185,12 @@ fig_brt, ax_brt = plt.subplots(figsize=(10, 4))
 
 ax_brt.plot(t_u, simV, label="BRT")
 ax_brt.axhline(0.0, color="black", linestyle="--", label="V = 0")
+ax_brt.axhline(
+    V_thr,
+    color="tab:red",
+    linestyle=":",
+    label="Activation threshold",
+)
 
 ax_brt.set_xlabel("Time [s]")
 ax_brt.set_ylabel("V")
