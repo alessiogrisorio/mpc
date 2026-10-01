@@ -33,14 +33,9 @@ acc_max = 3.0
 
 def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
 
-    # Create ocp
+    # Create ocp and model
     ocp = AcadosOcp()
-
-    # Model
     model = ego_model(lf, lr)
-    X_H = SX.sym("X_H")
-    Y_H = SX.sym("Y_H")
-    RETURN_ON = SX.sym("RETURN_ON")
 
     # Ego variables
     X_E = model.x[0]
@@ -51,15 +46,91 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     STEERING_RATE = model.u[0]
     ACCELERATION = model.u[1]
 
-    # HJ variables
+    # Variabili da aggiornare durante la simulazione
+    X_H = SX.sym("X_H")
+    Y_H = SX.sym("Y_H")
+    RETURN_ON = SX.sym("RETURN_ON")
     M1 = SX.sym("M1")
     M2 = SX.sym("M2")
     B_HJ = SX.sym("B_HJ")
-
-    # Variabili da aggiornare durante la simulazione
     model.p = vertcat(X_H, Y_H, RETURN_ON, M1, M2, B_HJ)
+    ocp.model = model
+    ocp.parameter_values = np.array([
+        human_pos[0],
+        human_pos[1],
+        0.0,   # RETURN_ON
+        0.0,   # M1
+        0.0,   # M2
+        1.0,   # B_HJ
+    ])
 
-    # Double circle constraints
+    # Lane error
+    lane_error = (Y_E - LANE_CENTER_1) * (Y_E - LANE_CENTER_2) / (LANE_HALF_DISTANCE**2)
+
+    # Left lane penalty
+    left_lane_penalty = RETURN_ON * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
+
+    # Costi da controllare
+    ocp.cost.cost_type = 'NONLINEAR_LS'
+    ocp.cost.cost_type_e = 'NONLINEAR_LS'
+    model.cost_y_expr = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, left_lane_penalty, STEERING_RATE, ACCELERATION)
+    model.cost_y_expr_e = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, left_lane_penalty)
+
+    # Pesi
+    Q = np.diag([
+        0.0,     # X
+        2.0,     # lane error
+        0.6 / psi_max**2,    # psi
+        300.0 / v_max**2,    # velocity
+        0.0,     # delta
+        5.0,  # left lane penalty
+    ]) * 1e-2
+    R = np.diag([
+        0.01 / steering_rate_max**2,     # steering rate
+        1.8 / acc_max**2,     # acceleration
+    ]) * 1e-2
+    Qe = Q.copy()
+    ocp.cost.W = scipy.linalg.block_diag(Q, R)
+    ocp.cost.W_e = Qe
+
+    # Reference
+    ocp.cost.yref = np.array([
+        0.0,        # X
+        0.0,        # lane error
+        0.0,        # psi
+        v_ref,      # v
+        0.0,        # delta
+        0.0,        # left lane penalty
+        0.0,        # steering rate
+        0.0,        # acceleration
+    ])
+    ocp.cost.yref_e = np.array([
+        0.0,        # X
+        0.0,        # lane error
+        0.0,        # psi
+        v_ref,      # v
+        0.0,        # delta
+        0.0,        # left lane penalty
+    ])
+
+    # LIMITI FISICI
+    # Stato
+    y_min = ROAD_Y_MIN + EGO_WIDTH / 2.0
+    y_max = ROAD_Y_MAX - EGO_WIDTH / 2.0
+    ocp.constraints.idxbx = np.array([1, 3, 4])
+    ocp.constraints.lbx = np.array([y_min, 1.0, -np.pi / 12])
+    ocp.constraints.ubx = np.array([y_max, 11.0, np.pi / 12])
+    # Terminal state
+    ocp.constraints.idxbx_e = ocp.constraints.idxbx.copy()
+    ocp.constraints.lbx_e = ocp.constraints.lbx.copy()
+    ocp.constraints.ubx_e = ocp.constraints.ubx.copy()
+    # Input
+    ocp.constraints.idxbu = np.array([0, 1])
+    ocp.constraints.lbu = np.array([-0.087, -7.0])
+    ocp.constraints.ubu = np.array([0.087, 2.5])
+
+
+    # Vincolo geometrico di collisione
     XC_EGO_FRONT = X_E + EGO_LENGTH / 4.0 * cos(PSI_E)
     XC_EGO_REAR = X_E - EGO_LENGTH / 4.0 * cos(PSI_E)
     YC_EGO_FRONT = Y_E + EGO_LENGTH / 4.0 * sin(PSI_E)
@@ -79,13 +150,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
         separation_rr,
     )
 
-    # Lane error
-    lane_error = (Y_E - LANE_CENTER_1) * (Y_E - LANE_CENTER_2) / (LANE_HALF_DISTANCE**2)
-
-    # Left lane penalty
-    left_lane_penalty = RETURN_ON * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
-
-    # HJ constraint
+    # Vincolo HJ
     hj_constraint = M1 * STEERING_RATE + M2 * ACCELERATION + B_HJ
 
     # Espressioni dei vincoli
@@ -93,90 +158,30 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     model.con_h_expr_0 = vertcat(separation, hj_constraint)
     model.con_h_expr_e = separation
 
-    # OCP model
-    ocp.model = model
-    ocp.parameter_values = np.asarray([human_pos[0], human_pos[1], 0.0])
-
-    # Dimensions
-    nx = model.x.rows()
-    nu = model.u.rows()
-
-    # Cost
-    ocp.cost.cost_type = 'NONLINEAR_LS'
-    ocp.cost.cost_type_e = 'NONLINEAR_LS'
-
-    model.cost_y_expr = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, left_lane_penalty, STEERING_RATE, ACCELERATION)
-    model.cost_y_expr_e = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, left_lane_penalty)
-
-    Q = np.diag([
-        0.0,     # X
-        2.0,     # lane error
-        0.6 / psi_max**2,    # psi
-        300.0 / v_max**2,    # velocity
-        0.0,     # delta
-        5.0,  # left lane penalty
-    ]) * 1e-2
-
-    R = np.diag([
-        0.01 / steering_rate_max**2,     # steering rate
-        1.8 / acc_max**2,     # acceleration
-    ]) * 1e-2
-
-    Qe = Q.copy()
-
-    ocp.cost.W = scipy.linalg.block_diag(Q, R)
-    ocp.cost.W_e = Qe
-
-    ocp.cost.yref = np.array([
-        0.0,        # X
-        0.0,        # lane error
-        0.0,        # psi
-        v_ref,      # v
-        0.0,        # delta
-        0.0,        # left lane penalty
-        0.0,        # steering rate
-        0.0,        # acceleration
-    ])
-
-    ocp.cost.yref_e = np.array([
-        0.0,        # X
-        0.0,        # lane error
-        0.0,        # psi
-        v_ref,      # v
-        0.0,        # delta
-        0.0,        # left lane penalty
-    ])
-
-    # Input bounds
-    ocp.constraints.idxbu = np.array([0, 1])
-    ocp.constraints.lbu = np.array([-0.087, -7.0])
-    ocp.constraints.ubu = np.array([0.087, 2.5])
-
-    # State bounds
-    y_min = ROAD_Y_MIN + EGO_WIDTH / 2.0
-    y_max = ROAD_Y_MAX - EGO_WIDTH / 2.0
-    ocp.constraints.idxbx = np.array([1, 3, 4])
-    ocp.constraints.lbx = np.array([y_min, 1.0, -np.pi / 12])
-    ocp.constraints.ubx = np.array([y_max, 11.0, np.pi / 12])
-
-    # Terminal state bounds
-    ocp.constraints.idxbx_e = ocp.constraints.idxbx.copy()
-    ocp.constraints.lbx_e = ocp.constraints.lbx.copy()
-    ocp.constraints.ubx_e = ocp.constraints.ubx.copy()
-
-    # Collision constraints
+    # Limiti dei vincoli collisione e HJ
     ocp.constraints.lh = np.zeros(5)
     ocp.constraints.uh = np.full(5, 1e15)
 
     ocp.constraints.lh_0 = ocp.constraints.lh.copy()
     ocp.constraints.uh_0 = ocp.constraints.uh.copy()
 
+    # Vincolo terminale solo su collisione
     ocp.constraints.lh_e = np.zeros(4)
-    ocp.constraints.uh_e = 1e15 * np.ones(4)
+    ocp.constraints.uh_e = np.full(4, 1e15)
 
-    # Soft constraint su HJ
+    # Soft constraint su HJ, indice 4
     ocp.constraints.idxsh = np.array([4])
     ocp.constraints.idxsh_0 = np.array([4])
+
+    # Penalità del soft constraint
+    ocp.cost.Zl = np.array([100.0])
+    ocp.cost.Zu = np.array([100.0])
+    ocp.cost.zl = np.array([100.0])
+    ocp.cost.zu = np.array([100.0])
+    ocp.cost.Zl_0 = ocp.cost.Zl.copy()
+    ocp.cost.Zu_0 = ocp.cost.Zu.copy()
+    ocp.cost.zl_0 = ocp.cost.zl.copy()
+    ocp.cost.zu_0 = ocp.cost.zu.copy()
 
     # Inizial condition
     ocp.constraints.x0 = np.asarray(x0, dtype=float)
@@ -191,7 +196,6 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     ocp.solver_options.integrator_type = "ERK"
     ocp.solver_options.sim_method_num_stages = 4
     ocp.solver_options.sim_method_num_steps = 3
-
     ocp.code_gen_options.code_export_directory = "codegen_ocp"
 
     # Create solver
