@@ -46,7 +46,6 @@ human_pos = np.array([X_H_initial, Y_H_initial])
 model, acados_solver = acados_settings(
     Tf, N, lf, lr, x0, v_ref, human_pos
 )
-
 nx = model.x.rows()     # 5
 nu = model.u.rows()     # 2
 
@@ -65,7 +64,6 @@ acados_integrator = AcadosSimSolver(sim)
 # Inizializzazione
 x_guess = x0.copy()
 u_guess = np.zeros(2)
-
 acados_solver.set(0, "x", x_guess)
 
 for j in range(N):
@@ -75,7 +73,6 @@ for j in range(N):
     status_sim = acados_integrator.solve()
     if status_sim != 0:
         raise RuntimeError(f"Initial guess integration failed: {status_sim}")
-
     x_guess = acados_integrator.get("x")
     acados_solver.set(j + 1, "x", x_guess)
 
@@ -130,7 +127,6 @@ for i in range(Nsim):
     start = time.perf_counter()
     status = acados_solver.solve()
     solve_time[i] = time.perf_counter() - start
-
     if status not in (0, 2):
         acados_solver.print_statistics()
         raise RuntimeError(
@@ -148,7 +144,6 @@ for i in range(Nsim):
 
     if status not in (0, 2):
         raise RuntimeError(f"Integrator failed at step {i}, status = {status}")
-
     simX[i + 1, :] = acados_integrator.get("x")
 
 

@@ -41,9 +41,8 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     X_H = SX.sym("X_H")
     Y_H = SX.sym("Y_H")
     RETURN_ON = SX.sym("RETURN_ON")
-    model.p = vertcat(X_H, Y_H, RETURN_ON)
 
-    # Model variables
+    # Ego variables
     X_E = model.x[0]
     Y_E = model.x[1]
     PSI_E = model.x[2]
@@ -51,6 +50,14 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     DELTA_E = model.x[4]
     STEERING_RATE = model.u[0]
     ACCELERATION = model.u[1]
+
+    # HJ variables
+    M1 = SX.sym("M1")
+    M2 = SX.sym("M2")
+    B_HJ = SX.sym("B_HJ")
+
+    # Variabili da aggiornare durante la simulazione
+    model.p = vertcat(X_H, Y_H, RETURN_ON, M1, M2, B_HJ)
 
     # Double circle constraints
     XC_EGO_FRONT = X_E + EGO_LENGTH / 4.0 * cos(PSI_E)
@@ -65,7 +72,6 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     separation_fr = (XC_EGO_FRONT - XC_HUMAN_REAR)**2 + (YC_EGO_FRONT - YC_HUMAN_REAR)**2 - safety_r**2
     separation_rf = (XC_EGO_REAR - XC_HUMAN_FRONT)**2 + (YC_EGO_REAR - YC_HUMAN_FRONT)**2 - safety_r**2
     separation_rr = (XC_EGO_REAR - XC_HUMAN_REAR)**2 + (YC_EGO_REAR - YC_HUMAN_REAR)**2 - safety_r**2
-
     separation = vertcat(
         separation_ff,
         separation_fr,
@@ -79,9 +85,15 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     # Left lane penalty
     left_lane_penalty = RETURN_ON * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
 
-    model.con_h_expr = separation
+    # HJ constraint
+    hj_constraint = M1 * STEERING_RATE + M2 * ACCELERATION + B_HJ
+
+    # Espressioni dei vincoli
+    model.con_h_expr = vertcat(separation, hj_constraint)
+    model.con_h_expr_0 = vertcat(separation, hj_constraint)
     model.con_h_expr_e = separation
 
+    # OCP model
     ocp.model = model
     ocp.parameter_values = np.asarray([human_pos[0], human_pos[1], 0.0])
 
@@ -153,12 +165,18 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     ocp.constraints.ubx_e = ocp.constraints.ubx.copy()
 
     # Collision constraints
-    nh = 4
-    ocp.constraints.lh = np.zeros(nh)
-    ocp.constraints.uh = 1e15 * np.ones(nh)
+    ocp.constraints.lh = np.zeros(5)
+    ocp.constraints.uh = np.full(5, 1e15)
 
-    ocp.constraints.lh_e = np.zeros(nh)
-    ocp.constraints.uh_e = 1e15 * np.ones(nh)
+    ocp.constraints.lh_0 = ocp.constraints.lh.copy()
+    ocp.constraints.uh_0 = ocp.constraints.uh.copy()
+
+    ocp.constraints.lh_e = np.zeros(4)
+    ocp.constraints.uh_e = 1e15 * np.ones(4)
+
+    # Soft constraint su HJ
+    ocp.constraints.idxsh = np.array([4])
+    ocp.constraints.idxsh_0 = np.array([4])
 
     # Inizial condition
     ocp.constraints.x0 = np.asarray(x0, dtype=float)
