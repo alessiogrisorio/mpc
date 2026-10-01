@@ -1,4 +1,5 @@
 import numpy as np
+import json
 from scipy.interpolate import RegularGridInterpolator
 
 class BRTinterpolator:
@@ -14,6 +15,8 @@ class BRTinterpolator:
             ]
             values = data["BRT"]
             gradients = data["gradients"]
+            metadata = json.loads(data["metadata_json"].item())
+            self.dynamics_parameters = metadata["dynamics"]["parameters"]
             self.theta_min = float(data["grid_lo"][2])
             self.theta_period = float(data["grid_hi"][2] - data["grid_lo"][2])
             expected_shape = tuple(len(axis) for axis in coordinates)
@@ -57,3 +60,28 @@ class BRTinterpolator:
         gradient = self.gradient_interpolator(point)[0]
 
         return value, gradient, True
+
+def hj_coefficients(relative_state, gradient, dynamics_parameters):
+    x_rel, y_rel, theta_rel, v_H, delta_E, v_E = relative_state
+    p = np.asarray(gradient, dtype=float)
+    lf = dynamics_parameters["lf"]
+    lr = dynamics_parameters["lr"]
+    beta_E = np.arctan(lr / (lf + lr) * np.tan(delta_E))
+    omega_E = v_E * np.cos(beta_E) / (lf + lr) * np.tan(delta_E)
+    drift = np.array([
+        v_H * np.cos(theta_rel) - v_E * np.cos(beta_E) + y_rel * omega_E,
+        v_H * np.sin(theta_rel) - v_E * np.sin(beta_E) - x_rel * omega_E,
+        -omega_E,
+        0.0,
+        0.0,
+        0.0,
+    ])
+    human_yaw_rate_max = dynamics_parameters["human_max_yaw_rate"]
+    human_acc_max = dynamics_parameters["human_max_acceleration"]
+    human_acc_min = dynamics_parameters["human_min_acceleration"]
+    worst_yaw_term = -abs(p[2]) * human_yaw_rate_max
+    worst_acc_term = min(p[3] * human_acc_min, p[3] * human_acc_max)
+    M_HJ = p[[4, 5]]
+    b_HJ = float(p @ drift + worst_yaw_term + worst_acc_term)
+
+    return M_HJ, b_HJ

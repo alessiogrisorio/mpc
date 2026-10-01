@@ -6,7 +6,7 @@ from acados_template import AcadosSim, AcadosSimSolver
 from acados_settings import acados_settings, EGO_LENGTH, HUMAN_LENGTH, safety_r
 from animation import animate_simulation, plot_results
 from pathlib import Path
-from brt_utils import BRTinterpolator
+from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
 
 # BRT parameters
@@ -108,7 +108,14 @@ for i in range(Nsim):
         DELTA_E,
         V_E,
     ])
+
+    # Valutazione BRT
     simV[i], simGradV[i], simInsideGrid[i] = brt.evaluate(relative_state)
+    if simInsideGrid[i]:
+        M_HJ, b_HJ = hj_coefficients(relative_state, simGradV[i], brt.dynamics_parameters)
+    else:
+        M_HJ = np.zeros(2)
+        b_HJ = 1.0
 
     # Activete return to right lane
     if x_current[0] > X_H_current + pass_margin:
