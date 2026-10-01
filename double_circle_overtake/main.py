@@ -3,7 +3,7 @@ import time
 import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
-from acados_settings import acados_settings
+from acados_settings import acados_settings, EGO_LENGTH, HUMAN_LENGTH, safety_r
 from animation import animate_simulation, plot_results
 import matplotlib.pyplot as plt
 
@@ -28,7 +28,7 @@ Nsim = int(round(Tsim / dt))
 # Ego: [X, Y, psi, v, delta]
 v_ref = 5.0
 x0 = np.array([0.0, 0.0, 0.0, 5.0, 0.0])
-pass_margin = 8
+pass_margin = EGO_LENGTH / 4.0 + HUMAN_LENGTH / 4.0 + safety_r
 
 # Human
 X_H_initial = 12.0

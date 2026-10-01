@@ -9,9 +9,13 @@ from ego_model import ego_model
 # Vehicles dimensions
 EGO_LENGTH = 4.68
 EGO_WIDTH = 2.20
-
 HUMAN_LENGTH = 4.28
 HUMAN_WIDTH = 1.80
+
+# Circle dimensions
+rho_E = np.hypot(EGO_LENGTH / 4.0, EGO_WIDTH / 2.0)
+rho_H = np.hypot(HUMAN_LENGTH / 4.0, HUMAN_WIDTH / 2.0)
+safety_r = rho_E + rho_H
 
 # Road dimensions
 ROAD_Y_MIN = -2.0
@@ -33,7 +37,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     RETURN_ON = SX.sym("RETURN_ON")
     model.p = vertcat(X_H, Y_H, RETURN_ON)
 
-    # Double circle constraints
+    # Model variables
     X_E = model.x[0]
     Y_E = model.x[1]
     PSI_E = model.x[2]
@@ -42,10 +46,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     STEERING_RATE = model.u[0]
     ACCELERATION = model.u[1]
 
-    rho_E = np.hypot(EGO_LENGTH / 4.0, EGO_WIDTH / 2.0)
-    rho_H = np.hypot(HUMAN_LENGTH / 4.0, HUMAN_WIDTH / 2.0)
-    safety_r = rho_E + rho_H
-
+    # Double circle constraints
     XC_EGO_FRONT = X_E + EGO_LENGTH / 4.0 * cos(PSI_E)
     XC_EGO_REAR = X_E - EGO_LENGTH / 4.0 * cos(PSI_E)
     YC_EGO_FRONT = Y_E + EGO_LENGTH / 4.0 * sin(PSI_E)
@@ -70,7 +71,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     lane_error = (Y_E - LANE_CENTER_1) * (Y_E - LANE_CENTER_2) / (LANE_HALF_DISTANCE**2)
 
     # Left lane penalty
-    left_lane_penalty = RETURN_ON * (Y_E - LANE_CENTER_1)**2 / ((Y_E - LANE_CENTER_2)**2 + (Y_E - LANE_CENTER_2)**2 + 1e-6)
+    left_lane_penalty = RETURN_ON * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
 
     model.con_h_expr = separation
     model.con_h_expr_e = separation
@@ -95,7 +96,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
         10.0,    # psi
         50.0,    # velocity
         0.0,     # delta
-        0.0,  # left lane penalty
+        5.0,  # left lane penalty
     ])
 
     R = np.diag([
