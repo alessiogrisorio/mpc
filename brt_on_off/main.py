@@ -5,7 +5,14 @@ import numpy as np
 from acados_template import AcadosSim, AcadosSimSolver
 from acados_settings import acados_settings, EGO_LENGTH, HUMAN_LENGTH, safety_r
 from animation import animate_simulation, plot_results
+from pathlib import Path
+from brt_utils import BRTinterpolator
 import matplotlib.pyplot as plt
+
+# BRT parameters
+brt_type = "euclidean.npz"
+brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
+brt = BRTinterpolator(brt_path)
 
 
 # Vehicle parameters

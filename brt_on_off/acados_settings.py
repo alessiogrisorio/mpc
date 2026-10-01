@@ -144,8 +144,8 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     y_min = ROAD_Y_MIN + EGO_WIDTH / 2.0
     y_max = ROAD_Y_MAX - EGO_WIDTH / 2.0
     ocp.constraints.idxbx = np.array([1, 3, 4])
-    ocp.constraints.lbx = np.array([y_min, 1.0, -0.4])
-    ocp.constraints.ubx = np.array([y_max, 11.0, 0.4])
+    ocp.constraints.lbx = np.array([y_min, 1.0, -np.pi / 12])
+    ocp.constraints.ubx = np.array([y_max, 11.0, np.pi / 12])
 
     # Terminal state bounds
     ocp.constraints.idxbx_e = ocp.constraints.idxbx.copy()

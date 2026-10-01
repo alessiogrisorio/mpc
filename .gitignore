@@ -8,3 +8,6 @@ codegen_*/
 c_generated_code/
 acados_ocp.json
 acados_sim.json
+
+# BRT
+brt/
