@@ -24,6 +24,12 @@ LANE_CENTER_1 = 0.0
 LANE_CENTER_2 = 4.0
 LANE_HALF_DISTANCE = (LANE_CENTER_2 - LANE_CENTER_1) / 2
 
+# Normalizzazione pesi
+psi_max = 0.2
+v_max = 2.0
+steering_rate_max = 0.087
+acc_max = 3.0
+
 
 def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
 
@@ -93,16 +99,16 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     Q = np.diag([
         0.0,     # X
         2.0,     # lane error
-        10.0,    # psi
-        50.0,    # velocity
+        0.6 / psi_max**2,    # psi
+        300.0 / v_max**2,    # velocity
         0.0,     # delta
         5.0,  # left lane penalty
-    ])
+    ]) * 1e-2
 
     R = np.diag([
-        1.0,     # steering rate
-        0.2,     # acceleration
-    ])
+        0.01 / steering_rate_max**2,     # steering rate
+        1.8 / acc_max**2,     # acceleration
+    ]) * 1e-2
 
     Qe = Q.copy()
 
