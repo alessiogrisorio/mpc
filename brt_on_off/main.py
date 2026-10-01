@@ -14,7 +14,6 @@ brt_type = "euclidean.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
 
-
 # Vehicle parameters
 lf = 1.2
 lr = 1.5
@@ -85,6 +84,9 @@ simX = np.zeros((Nsim + 1, nx))     # 501 x 5
 simU = np.zeros((Nsim, nu))         # 500 x 2
 solve_time = np.zeros(Nsim)         # 500 x 1
 simX[0, :] = x0
+simV = np.full(Nsim, np.nan)                # 500 x 1
+simGradV = np.full((Nsim, 6), np.nan)       # 500 x 6
+simInsideGrid = np.zeros(Nsim, dtype=bool)  # 500 x 1
 
 # Simulation
 for i in range(Nsim):
@@ -97,6 +99,16 @@ for i in range(Nsim):
 
     # Aggiorno posizione human
     X_H_current = X_H_initial + v_H * i * dt
+    X_E, Y_E, PSI_E, V_E, DELTA_E = x_current
+    relative_state = np.array([
+        np.cos(PSI_E) * (X_H_current - X_E) + np.sin(PSI_E) * (Y_H_initial - Y_E),
+        -np.sin(PSI_E) * (X_H_current - X_E) + np.cos(PSI_E) * (Y_H_initial - Y_E),
+        -PSI_E,
+        v_H,
+        DELTA_E,
+        V_E,
+    ])
+    simV[i], simGradV[i], simInsideGrid[i] = brt.evaluate(relative_state)
 
     # Activete return to right lane
     if x_current[0] > X_H_current + pass_margin:
@@ -139,6 +151,22 @@ print(f"Maximum OCP solve time: {1e3 * solve_time.max():.3f} ms")
 
 t_x = np.arange(Nsim + 1) * dt
 t_u = np.arange(Nsim) * dt
+
+fig_brt, ax_brt = plt.subplots(figsize=(10, 4))
+
+ax_brt.plot(t_u, simV, label="BRT")
+ax_brt.axhline(0.0, color="black", linestyle="--", label="V = 0")
+
+ax_brt.set_xlabel("Time [s]")
+ax_brt.set_ylabel("V")
+ax_brt.grid(True)
+ax_brt.legend()
+fig_brt.tight_layout()
+
+print(
+    f"Stati dentro la griglia BRT: "
+    f"{simInsideGrid.sum()}/{Nsim}"
+)
 
 plot_results(
     t_x,
