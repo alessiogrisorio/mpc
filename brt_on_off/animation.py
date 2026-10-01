@@ -16,87 +16,118 @@ from acados_settings import (
 )
 
 
-def plot_results(t_x, t_u, simX, simU, v_ref, v_H):
+def plot_results(
+    dt,
+    simX,
+    simU,
+    v_ref,
+    v_H,
+    simV,
+    simHJActive,
+    V_thr,
+):
 
-    fig, axes = plt.subplots(3, 2, figsize=(12, 9))
+    t_x = np.arange(len(simX)) * dt
+    t_u = np.arange(len(simU)) * dt
+
+    fig = plt.figure(figsize=(12, 12), layout="constrained")
+    grid = fig.add_gridspec(4, 2)
+
+    ax_brt = fig.add_subplot(grid[0, :])
+    axes = np.array([
+        [fig.add_subplot(grid[1, 0]), fig.add_subplot(grid[1, 1])],
+        [fig.add_subplot(grid[2, 0]), fig.add_subplot(grid[2, 1])],
+        [fig.add_subplot(grid[3, 0]), fig.add_subplot(grid[3, 1])],
+    ])
+
+    # BRT
+    active = np.asarray(simHJActive, dtype=bool)
+    transitions = np.diff(
+        np.concatenate(([False], active, [False])).astype(int)
+    )
+    starts = np.flatnonzero(transitions == 1)
+    ends = np.flatnonzero(transitions == -1)
+
+    for k, (start, end) in enumerate(zip(starts, ends)):
+        ax_brt.axvspan(
+            start * dt,
+            end * dt,
+            color="#fff2b2",
+            alpha=0.7,
+            linewidth=0,
+            label="HJ active" if k == 0 else None,
+            zorder=0,
+        )
+
+    ax_brt.plot(t_u, simV, label="BRT")
+    ax_brt.axhline(
+        0.0,
+        color="black",
+        linestyle="--",
+        label="V = 0",
+    )
+    ax_brt.axhline(
+        V_thr,
+        color="tab:red",
+        linestyle=":",
+        label="Activation threshold",
+    )
+    ax_brt.set_xlim(t_x[0], t_x[-1])
+    ax_brt.set_xlabel("Time [s]")
+    ax_brt.set_ylabel("V")
+    ax_brt.set_title("BRT value function")
+    ax_brt.legend()
 
     # Trajectory
-    axes[0, 0].plot(
-        simX[:, 0],
-        simX[:, 1],
-        label="Ego",
-    )
-
+    axes[0, 0].plot(simX[:, 0], simX[:, 1], label="Ego")
     axes[0, 0].axhline(
         ROAD_Y_MIN,
         color="black",
         label="Road boundaries",
     )
-
-    axes[0, 0].axhline(
-        ROAD_Y_MAX,
-        color="black",
-    )
-
+    axes[0, 0].axhline(ROAD_Y_MAX, color="black")
     axes[0, 0].axhline(
         2.0,
         color="black",
         linestyle="--",
         label="Lane divider",
     )
-
     axes[0, 0].axhline(
         0.0,
         color="gray",
         linestyle=":",
         label="Reference",
     )
-
     axes[0, 0].set_xlabel("X [m]")
     axes[0, 0].set_ylabel("Y [m]")
     axes[0, 0].set_title("Trajectory")
     axes[0, 0].legend()
 
     # Speed
-    axes[0, 1].plot(
-        t_x,
-        simX[:, 3],
-        label="Ego",
-    )
-
+    axes[0, 1].plot(t_x, simX[:, 3], label="Ego")
     axes[0, 1].axhline(
         v_ref,
         color="black",
         linestyle="--",
         label="Reference",
     )
-
     axes[0, 1].axhline(
         v_H,
         color="gray",
         linestyle=":",
         label="Human",
     )
-
     axes[0, 1].set_xlabel("Time [s]")
     axes[0, 1].set_ylabel("Speed [m/s]")
     axes[0, 1].legend()
 
     # Heading
-    axes[1, 0].plot(
-        t_x,
-        np.rad2deg(simX[:, 2]),
-    )
-
+    axes[1, 0].plot(t_x, np.rad2deg(simX[:, 2]))
     axes[1, 0].set_xlabel("Time [s]")
     axes[1, 0].set_ylabel("Heading [deg]")
 
     # Steering angle
-    axes[1, 1].plot(
-        t_x,
-        np.rad2deg(simX[:, 4]),
-    )
-
+    axes[1, 1].plot(t_x, np.rad2deg(simX[:, 4]))
     axes[1, 1].set_xlabel("Time [s]")
     axes[1, 1].set_ylabel("Steering angle [deg]")
 
@@ -106,24 +137,17 @@ def plot_results(t_x, t_u, simX, simU, v_ref, v_H):
         np.rad2deg(simU[:, 0]),
         where="post",
     )
-
     axes[2, 0].set_xlabel("Time [s]")
     axes[2, 0].set_ylabel("Steering rate [deg/s]")
 
     # Acceleration
-    axes[2, 1].step(
-        t_u,
-        simU[:, 1],
-        where="post",
-    )
-
+    axes[2, 1].step(t_u, simU[:, 1], where="post")
     axes[2, 1].set_xlabel("Time [s]")
     axes[2, 1].set_ylabel("Acceleration [m/s²]")
 
-    for ax in axes.flat:
+    for ax in fig.axes:
         ax.grid(True)
-
-    fig.tight_layout()
+        ax.set_axisbelow(True)
 
     return fig, axes
 

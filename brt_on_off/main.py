@@ -10,10 +10,10 @@ from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
 
 # BRT parameters
-brt_type = "euclidean.npz"
+brt_type = "ttc.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
-V_thr = 0.7
+V_thr = 2
 HJ_STAGES = 3
 
 # Vehicle parameters
@@ -39,7 +39,7 @@ x0 = np.array([0.0, 0.0, 0.0, 5.0, 0.0])
 pass_margin = EGO_LENGTH / 4.0 + HUMAN_LENGTH / 4.0 + safety_r
 
 # Human
-X_H_initial = 12.0
+X_H_initial = 20.0
 Y_H_initial = 0.0
 v_H = 2.0
 human_pos = np.array([X_H_initial, Y_H_initial])
@@ -178,40 +178,23 @@ for i in range(Nsim):
 print(f"\n\nMean OCP solve time: {1e3 * solve_time.mean():.3f} ms")
 print(f"Maximum OCP solve time: {1e3 * solve_time.max():.3f} ms")
 
-t_x = np.arange(Nsim + 1) * dt
-t_u = np.arange(Nsim) * dt
-
-fig_brt, ax_brt = plt.subplots(figsize=(10, 4))
-
-ax_brt.plot(t_u, simV, label="BRT")
-ax_brt.axhline(0.0, color="black", linestyle="--", label="V = 0")
-ax_brt.axhline(
-    V_thr,
-    color="tab:red",
-    linestyle=":",
-    label="Activation threshold",
-)
-
-ax_brt.set_xlabel("Time [s]")
-ax_brt.set_ylabel("V")
-ax_brt.grid(True)
-ax_brt.legend()
-fig_brt.tight_layout()
-
 print(
     f"Stati dentro la griglia BRT: "
     f"{simInsideGrid.sum()}/{Nsim}"
 )
 
 plot_results(
-    t_x,
-    t_u,
+    dt,
     simX,
     simU,
     v_ref,
     v_H,
+    simV,
+    simHJActive,
+    V_thr,
 )
 
+t_x = np.arange(len(simX)) * dt
 animation = animate_simulation(
     t_x,
     simX,

@@ -81,7 +81,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
         0.0,     # X
         2.0,     # lane error
         0.6 / psi_max**2,    # psi
-        300.0 / v_max**2,    # velocity
+        500.0 / v_max**2,    # velocity
         0.0,     # delta
         5.0,  # left lane penalty
     ]) * 1e-2
@@ -117,9 +117,9 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
     # Stato
     y_min = ROAD_Y_MIN + EGO_WIDTH / 2.0
     y_max = ROAD_Y_MAX - EGO_WIDTH / 2.0
-    ocp.constraints.idxbx = np.array([1, 3, 4])
-    ocp.constraints.lbx = np.array([y_min, 1.0, -np.pi / 12])
-    ocp.constraints.ubx = np.array([y_max, 11.0, np.pi / 12])
+    ocp.constraints.idxbx = np.array([3, 4])
+    ocp.constraints.lbx = np.array([1.0, -np.pi / 12])
+    ocp.constraints.ubx = np.array([11.0, np.pi / 12])
     # Terminal state
     ocp.constraints.idxbx_e = ocp.constraints.idxbx.copy()
     ocp.constraints.lbx_e = ocp.constraints.lbx.copy()
@@ -149,25 +149,32 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
         separation_rf,
         separation_rr,
     )
+    street_bounds = vertcat(
+        Y_E + 0.5 * (EGO_LENGTH * sin(PSI_E) + EGO_WIDTH * cos(PSI_E)),
+        Y_E + 0.5 * (EGO_LENGTH * sin(PSI_E) - EGO_WIDTH * cos(PSI_E)),
+        Y_E - 0.5 * (EGO_LENGTH * sin(PSI_E) + EGO_WIDTH * cos(PSI_E)),
+        Y_E - 0.5 * (EGO_LENGTH * sin(PSI_E) - EGO_WIDTH * cos(PSI_E)),
+    )
+    
 
     # Vincolo HJ
     hj_constraint = M1 * STEERING_RATE + M2 * ACCELERATION + B_HJ
 
     # Espressioni dei vincoli
-    model.con_h_expr = vertcat(separation, hj_constraint)
-    model.con_h_expr_0 = vertcat(separation, hj_constraint)
-    model.con_h_expr_e = separation
+    model.con_h_expr = vertcat(separation, hj_constraint, street_bounds)
+    model.con_h_expr_0 = vertcat(separation, hj_constraint, street_bounds)
+    model.con_h_expr_e = vertcat(separation, street_bounds)
 
     # Limiti dei vincoli collisione e HJ
-    ocp.constraints.lh = np.zeros(5)
-    ocp.constraints.uh = np.full(5, 1e15)
+    ocp.constraints.lh = np.concatenate([np.zeros(5), np.full(4, ROAD_Y_MIN)])
+    ocp.constraints.uh = np.concatenate([np.full(5, 1e15), np.full(4, ROAD_Y_MAX)])
 
     ocp.constraints.lh_0 = ocp.constraints.lh.copy()
     ocp.constraints.uh_0 = ocp.constraints.uh.copy()
 
     # Vincolo terminale solo su collisione
-    ocp.constraints.lh_e = np.zeros(4)
-    ocp.constraints.uh_e = np.full(4, 1e15)
+    ocp.constraints.lh_e = np.concatenate([np.zeros(4), np.full(4, ROAD_Y_MIN)])
+    ocp.constraints.uh_e = np.concatenate([np.full(4, 1e15), np.full(4, ROAD_Y_MAX)])
 
     # Soft constraint su HJ, indice 4
     ocp.constraints.idxsh = np.array([4])
