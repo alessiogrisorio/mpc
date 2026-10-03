@@ -10,10 +10,10 @@ from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
 
 # BRT parameters
-brt_type = "ttc.npz"
+brt_type = "euclidean.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
-V_thr = 2
+V_thr = 1
 HJ_STAGES = 3
 
 # Vehicle parameters
@@ -101,6 +101,7 @@ simHJSlack = np.zeros(Nsim)
 for i in range(Nsim):
 
     x_current = simX[i, :]
+    acados_solver.set(0, "x", x_current)
 
     # Current ego state
     acados_solver.set(0, "lbx", x_current)
@@ -172,6 +173,7 @@ for i in range(Nsim):
     if status not in (0, 2):
         raise RuntimeError(f"Integrator failed at step {i}, status = {status}")
     simX[i + 1, :] = acados_integrator.get("x")
+    
 
 
 # Print results
