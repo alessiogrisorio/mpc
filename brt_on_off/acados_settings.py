@@ -84,11 +84,11 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos):
         500.0 / v_max**2,    # velocity
         0.0,     # delta
         5.0,  # left lane penalty
-    ]) * 1e-2
+    ])
     R = np.diag([
         0.01 / steering_rate_max**2,     # steering rate
         1.8 / acc_max**2,     # acceleration
-    ]) * 1e-2
+    ])
     Qe = Q.copy()
     ocp.cost.W = scipy.linalg.block_diag(Q, R)
     ocp.cost.W_e = Qe
