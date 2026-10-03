@@ -1,0 +1,180 @@
+{
+    "project": "brt_on_off_copy",
+    "best_value": 432446.1815553894,
+    "baseline_weights": {
+        "lane": 2.0,
+        "psi": 0.6,
+        "velocity": 500.0,
+        "return": 5.0,
+        "steering_rate": 0.01,
+        "acceleration": 1.8
+    },
+    "best_weights": {
+        "lane": 3.890810431104229,
+        "psi": 1.4467453645031252,
+        "velocity": 56.477006267018474,
+        "return": 21.6320882587589,
+        "steering_rate": 0.09888880927846047,
+        "acceleration": 13.887061909157946
+    },
+    "baseline": {
+        "train": {
+            "scores": [
+                1343.3572410659501,
+                10344.093124589432,
+                2248.507759758156,
+                1000000.0,
+                1337.586445922348,
+                1338.0733551567719
+            ],
+            "mean": 169435.26965441546,
+            "worst": 1000000.0,
+            "std": 371453.80525241856,
+            "aggregate": 432794.5230286744,
+            "failures": 1,
+            "failure_details": [
+                {
+                    "scenario": {
+                        "v_ref": 6.8631907204839875,
+                        "x0": [
+                            0.0,
+                            0.0,
+                            0.0,
+                            7.93656967962498,
+                            0.0
+                        ],
+                        "X_H_initial": 12.272387217847768,
+                        "Y_H_initial": 0.0,
+                        "v_H": 3.7736567953093245,
+                        "Tsim": 20.0
+                    },
+                    "failure_phase": "simulation",
+                    "failure_time": 0.0,
+                    "status": 4
+                }
+            ],
+            "components": {
+                "velocity": 0.4251318749738472,
+                "control_effort": 0.015394735374518988,
+                "smoothness": 0.001278994180793034,
+                "lane_return": 1.4666234365807465,
+                "hj_slack": 3.2634599085628958e-06,
+                "overtake_penalty": 3320.4151529939613,
+                "failure_penalty": NaN
+            }
+        },
+        "validation": {
+            "scores": [
+                0.3535802258378151,
+                1000000.0,
+                4312.793338284228,
+                4.629693514186097
+            ],
+            "mean": 251079.44415300607,
+            "worst": 1000000.0,
+            "std": 432393.0651337993,
+            "aggregate": 503168.54288482445,
+            "failures": 1,
+            "failure_details": [
+                {
+                    "scenario": {
+                        "v_ref": 6.522858285528351,
+                        "x0": [
+                            0.0,
+                            0.0,
+                            0.0,
+                            4.348231381221747,
+                            0.0
+                        ],
+                        "X_H_initial": 12.636921974783746,
+                        "Y_H_initial": 0.0,
+                        "v_H": 5.0071690872744625,
+                        "Tsim": 20.0
+                    },
+                    "failure_phase": "simulation",
+                    "failure_time": 7.72,
+                    "status": 4
+                }
+            ],
+            "components": {
+                "velocity": 0.13105060330671311,
+                "control_effort": 0.04628328064016771,
+                "smoothness": 0.018219679076639288,
+                "lane_return": 0.3341347899200804,
+                "hj_slack": 1.1326694376230306,
+                "overtake_penalty": 1437.5965128841842,
+                "failure_penalty": NaN
+            }
+        }
+    },
+    "best": {
+        "train": {
+            "scores": [
+                2.224427466513339,
+                10205.657674714721,
+                2199.6174721178963,
+                1000000.0,
+                1139.2806779780738,
+                1.0322610276850632
+            ],
+            "mean": 168924.63541888414,
+            "worst": 1000000.0,
+            "std": 371684.69994150876,
+            "aggregate": 432446.1815553894,
+            "failures": 1,
+            "failure_details": [
+                {
+                    "scenario": {
+                        "v_ref": 6.8631907204839875,
+                        "x0": [
+                            0.0,
+                            0.0,
+                            0.0,
+                            7.93656967962498,
+                            0.0
+                        ],
+                        "X_H_initial": 12.272387217847768,
+                        "Y_H_initial": 0.0,
+                        "v_H": 3.7736567953093245,
+                        "Tsim": 20.0
+                    },
+                    "failure_phase": "simulation",
+                    "failure_time": 0.0,
+                    "status": 4
+                }
+            ],
+            "components": {
+                "velocity": 0.19041808846936958,
+                "control_effort": 0.02843596162019864,
+                "smoothness": 0.014065005396481122,
+                "lane_return": 0.4076387718140859,
+                "hj_slack": 0.5572943925545012,
+                "overtake_penalty": 2708.3646504411236,
+                "failure_penalty": NaN
+            }
+        },
+        "validation": {
+            "scores": [
+                0.34140643265788784,
+                0.26856173733986904,
+                4300.968345667607,
+                2.7604735494484443
+            ],
+            "mean": 1076.0846968467633,
+            "worst": 4300.968345667607,
+            "std": 1861.8877127918836,
+            "aggregate": 2161.588765970757,
+            "failures": 0,
+            "failure_details": [],
+            "components": {
+                "velocity": 0.15927456045028815,
+                "control_effort": 0.042255689072003264,
+                "smoothness": 0.023592393865573158,
+                "lane_return": 0.49942127945714965,
+                "hj_slack": 0.1202493735545208,
+                "overtake_penalty": 1075.2399035503636,
+                "failure_penalty": NaN
+            }
+        }
+    }
+}
