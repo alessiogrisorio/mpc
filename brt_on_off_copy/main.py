@@ -4,7 +4,7 @@ import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
 from acados_settings import acados_settings, EGO_LENGTH, HUMAN_LENGTH, safety_r
-from animation import animate_simulation, plot_results
+from animation import animate_simulation, plot_results, compute_ocp_cost_diagnostics, plot_ocp_diagnostics
 from pathlib import Path
 from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
@@ -44,7 +44,7 @@ def run_simulation(
     Nsim = int(round(Tsim / dt))
 
     # Ego: [X, Y, psi, v, delta]
-    v_ref = scenario.get("v_ref", 5.0)
+    v_ref = scenario.get("v_ref", 8.0)
     x0 = np.array(scenario.get("x0", [0.0, 0.0, 0.0, 5.0, 0.0]), dtype=float)
     pass_margin = EGO_LENGTH / 4.0 + HUMAN_LENGTH / 4.0 + safety_r
 
@@ -112,6 +112,9 @@ def run_simulation(
     simHJActive = np.zeros(Nsim, dtype=bool)        # 500 x 1
     simHJResidual = np.full(Nsim, np.nan)
     simHJSlack = np.zeros(Nsim)
+    simHJSlackUpper = np.zeros(Nsim)
+    simOcpCost = [] if make_plots else None
+    simOcpCostComponents = [] if make_plots else None
 
     # Simulation
     for i in range(Nsim):
@@ -186,7 +189,14 @@ def run_simulation(
         simU[i, :] = u0
         if hj_active:
             simHJResidual[i] = M_HJ @ u0 + b_HJ
-        simHJSlack[i] = acados_solver.get(0, "sl")[0]
+        sl = acados_solver.get(0, "sl")
+        su = acados_solver.get(0, "su")
+        simHJSlack[i] = sl[0] if len(sl) > 0 else 0.0
+        simHJSlackUpper[i] = su[0] if len(sl) > 0 else 0.0
+        if make_plots:
+            total_cost, components = compute_ocp_cost_diagnostics(acados_solver, N)
+            simOcpCost.append(total_cost)
+            simOcpCostComponents.append(components)
 
         # Ego simulator
         acados_integrator.set("x", x_current)
@@ -207,6 +217,8 @@ def run_simulation(
  
     ################################  
     if make_plots:
+        simOcpCost = np.asarray(simOcpCost)
+        simOcpCostComponents = np.asarray(simOcpCostComponents)
         plot_results(
             dt,
             simX,
@@ -216,6 +228,14 @@ def run_simulation(
             simV,
             simHJActive,
             V_thr,
+        )
+        plot_ocp_diagnostics(
+            dt,
+            simOcpCost,
+            simOcpCostComponents,
+            simHJSlack,
+            simHJSlackUpper,
+            simHJActive,
         )
     animation = None
     if make_animation:
@@ -248,6 +268,9 @@ def run_simulation(
         "simHJActive": simHJActive,
         "simHJResidual": simHJResidual,
         "simHJSlack": simHJSlack,
+        "simHJSlackUpper": simHJSlackUpper,
+        "simOcpCost": simOcpCost,
+        "simOcpCostComponents": simOcpCostComponents,
         "solve_time": solve_time,
         "dt": dt,
         "v_ref": v_ref,
