@@ -4,7 +4,7 @@ import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
 from acados_settings import acados_settings, EGO_LENGTH, HUMAN_LENGTH, safety_r
-from animation import animate_simulation, plot_results, compute_ocp_cost_diagnostics, plot_ocp_diagnostics
+from animation import animate_simulation, plot_results, initialize_ocp_cost_diagnostics, compute_ocp_cost_diagnostics, plot_ocp_diagnostics
 from pathlib import Path
 from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
@@ -19,7 +19,7 @@ HJ_STAGES = 3
 def run_simulation(
     weights=None,
     scenario=None,
-    make_plots=True,
+    make_plots=False,
     make_animation=True,
     raise_on_fail=True,
 ):
@@ -46,7 +46,6 @@ def run_simulation(
     # Ego: [X, Y, psi, v, delta]
     v_ref = scenario.get("v_ref", 8.0)
     x0 = np.array(scenario.get("x0", [0.0, 0.0, 0.0, 5.0, 0.0]), dtype=float)
-    pass_margin = EGO_LENGTH / 4.0 + HUMAN_LENGTH / 4.0 + safety_r
 
     # Human
     X_H_initial = scenario.get("X_H_initial", 20.0)
@@ -60,15 +59,16 @@ def run_simulation(
     )
     nx = model.x.rows()     # 5
     nu = model.u.rows()     # 2
+    cost_diagnostic = None
+    if make_plots:
+        cost_diagnostic = initialize_ocp_cost_diagnostics(acados_solver, N)
 
     # Vehicle simulator
-    return_on = 0.0
     sim = AcadosSim()
     sim.model = model
     sim.parameter_values = np.array([
         X_H_initial,
         Y_H_initial,
-        return_on,
         0.0,
         0.0,
         1.0,
@@ -148,11 +148,6 @@ def run_simulation(
             M_HJ = np.zeros(2)
             b_HJ = 1.0
 
-
-        # Activete return to right lane
-        if x_current[0] > X_H_current + pass_margin:
-            return_on = 1.0
-
         # Human prediction over MPC horizon
         for j in range(N + 1):
             if hj_active and j < HJ_STAGES:
@@ -162,7 +157,6 @@ def run_simulation(
             parameters = np.array([
                 X_H_current + v_H * j * dt_ocp,
                 Y_H_initial,
-                return_on,
                 *hj_parameters,
             ])
             acados_solver.set(j, "p", parameters)
@@ -194,7 +188,7 @@ def run_simulation(
         simHJSlack[i] = sl[0] if len(sl) > 0 else 0.0
         simHJSlackUpper[i] = su[0] if len(sl) > 0 else 0.0
         if make_plots:
-            total_cost, components = compute_ocp_cost_diagnostics(acados_solver, N)
+            total_cost, components = compute_ocp_cost_diagnostics(acados_solver, cost_diagnostic)
             simOcpCost.append(total_cost)
             simOcpCostComponents.append(components)
 

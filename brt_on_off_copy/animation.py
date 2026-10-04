@@ -13,19 +13,6 @@ from acados_settings import (
     HUMAN_WIDTH,
     ROAD_Y_MAX,
     ROAD_Y_MIN,
-    LANE_CENTER_1,
-    LANE_CENTER_2,
-    LANE_HALF_DISTANCE,
-)
-
-OCP_COST_COMPONENTS = (
-    "Lane",
-    "Heading",
-    "Velocity",
-    "Return-to-right-lane",
-    "Steering rate",
-    "Acceleration",
-    "HJ slack",
 )
 
 
@@ -52,253 +39,296 @@ def _slack_cost(slack, z, Z):
     )
 
 
-def compute_ocp_cost_diagnostics(
+OCP_COST_COMPONENTS = (
+    "Lane",
+    "Heading",
+    "Velocity",
+    "Steering rate",
+    "Acceleration",
+    "HJ slack",
+)
+
+
+def _lane_error(y):
+
+    return (
+        0.000759549 * y**7
+        - 0.0093316 * y**6
+        + 0.0303819 * y**5
+        + 0.0798611 * y**4
+        - 0.696181 * y**3
+        + 1.20486 * y**2
+    )
+
+
+def initialize_ocp_cost_diagnostics(
     acados_solver,
     N,
 ):
+
+    # Cost data are constant during the simulation.
+    # Read them only once.
+
+    W = np.asarray(
+        acados_solver.cost_get(0, "W"),
+        dtype=float,
+    )
+
+    yref = np.asarray(
+        acados_solver.cost_get(0, "yref"),
+        dtype=float,
+    )
+
+    W_e = np.asarray(
+        acados_solver.cost_get(N, "W"),
+        dtype=float,
+    )
+
+    yref_e = np.asarray(
+        acados_solver.cost_get(N, "yref"),
+        dtype=float,
+    )
+
+    # Our W matrices are diagonal.
+    W_diag = np.diag(W)
+    W_e_diag = np.diag(W_e)
+
+    # Stage scaling.
+    # Read once; this also remains correct if a
+    # non-uniform prediction grid is used later.
+    scaling = np.array([
+        float(
+            np.asarray(
+                acados_solver.cost_get(j, "scaling")
+            ).squeeze()
+        )
+        for j in range(N)
+    ])
+
+    scaling_e = float(
+        np.asarray(
+            acados_solver.cost_get(N, "scaling")
+        ).squeeze()
+    )
+
+    # Slack cost coefficients.
+    # There is one soft constraint: HJ.
+    zl = np.asarray(
+        acados_solver.cost_get(0, "zl"),
+        dtype=float,
+    ).reshape(-1)
+
+    zu = np.asarray(
+        acados_solver.cost_get(0, "zu"),
+        dtype=float,
+    ).reshape(-1)
+
+    Zl = np.asarray(
+        acados_solver.cost_get(0, "Zl"),
+        dtype=float,
+    ).reshape(-1)
+
+    Zu = np.asarray(
+        acados_solver.cost_get(0, "Zu"),
+        dtype=float,
+    ).reshape(-1)
+
+    return {
+        "N": N,
+        "W": W_diag,
+        "W_e": W_e_diag,
+        "yref": yref,
+        "yref_e": yref_e,
+        "scaling": scaling,
+        "scaling_e": scaling_e,
+        "zl": zl,
+        "zu": zu,
+        "Zl": Zl,
+        "Zu": Zu,
+    }
+
+
+def compute_ocp_cost_diagnostics(
+    acados_solver,
+    diagnostics,
+):
+
+    N = diagnostics["N"]
+
+    W = diagnostics["W"]
+    W_e = diagnostics["W_e"]
+
+    yref = diagnostics["yref"]
+    yref_e = diagnostics["yref_e"]
+
+    scaling = diagnostics["scaling"]
+    scaling_e = diagnostics["scaling_e"]
+
+    # --------------------------------------------------
+    # Retrieve the whole optimal prediction
+    # --------------------------------------------------
+
+    x = np.asarray(
+        acados_solver.get_flat("x"),
+        dtype=float,
+    ).reshape(N + 1, 5)
+
+    u = np.asarray(
+        acados_solver.get_flat("u"),
+        dtype=float,
+    ).reshape(N, 2)
+
+    sl = np.asarray(
+        acados_solver.get_flat("sl"),
+        dtype=float,
+    ).reshape(-1)
+
+    su = np.asarray(
+        acados_solver.get_flat("su"),
+        dtype=float,
+    ).reshape(-1)
+
+    # --------------------------------------------------
+    # Residuals over the complete prediction horizon
+    # --------------------------------------------------
+
+    Y = x[:, 1]
+    psi = x[:, 2]
+    velocity = x[:, 3]
+
+    lane_error = _lane_error(Y)
+
+    lane_residual = (
+        lane_error[:-1] - yref[1]
+    )
+
+    heading_residual = (
+        psi[:-1] - yref[2]
+    )
+
+    velocity_residual = (
+        velocity[:-1] - yref[3]
+    )
+
+    steering_rate_residual = (
+        u[:, 0] - yref[5]
+    )
+
+    acceleration_residual = (
+        u[:, 1] - yref[6]
+    )
+
+    # Terminal residuals
+    lane_terminal = (
+        lane_error[-1] - yref_e[1]
+    )
+
+    heading_terminal = (
+        psi[-1] - yref_e[2]
+    )
+
+    velocity_terminal = (
+        velocity[-1] - yref_e[3]
+    )
+
+    # --------------------------------------------------
+    # Cost decomposition
+    # --------------------------------------------------
 
     components = np.zeros(
         len(OCP_COST_COMPONENTS)
     )
 
-    # cost_y_expr indices:
-    #
-    # 0 -> X
-    # 1 -> lane error
-    # 2 -> heading
-    # 3 -> velocity
-    # 4 -> steering angle
-    # 5 -> return-to-right-lane
-    # 6 -> steering rate
-    # 7 -> acceleration
-    #
-    # X and steering angle are omitted because
-    # their current weights are zero.
-
-    component_map = {
-        1: 0,  # Lane
-        2: 1,  # Heading
-        3: 2,  # Velocity
-        5: 3,  # Return
-        6: 4,  # Steering rate
-        7: 5,  # Acceleration
-    }
-
-    # ----------------------------------------
-    # Path stages: j = 0, ..., N - 1
-    # ----------------------------------------
-
-    for j in range(N):
-
-        x = np.asarray(
-            acados_solver.get(j, "x"),
-            dtype=float,
-        )
-
-        u = np.asarray(
-            acados_solver.get(j, "u"),
-            dtype=float,
-        )
-
-        p = np.asarray(
-            acados_solver.get(j, "p"),
-            dtype=float,
-        )
-
-        X, Y, psi, v, delta = x
-
-        return_on = p[2]
-
-        lane_error = (
-            (Y - LANE_CENTER_1)
-            * (Y - LANE_CENTER_2)
-            / LANE_HALF_DISTANCE**2
-        )
-
-        return_error = (
-            return_on
-            * (Y - LANE_CENTER_1)
-            / (LANE_CENTER_2 - LANE_CENTER_1)
-        )
-
-        y = np.array([
-            X,
-            lane_error,
-            psi,
-            v,
-            delta,
-            return_error,
-            u[0],
-            u[1],
-        ])
-
-        yref = np.asarray(
-            acados_solver.cost_get(
-                j,
-                "yref",
-            ),
-            dtype=float,
-        )
-
-        W = np.asarray(
-            acados_solver.cost_get(
-                j,
-                "W",
-            ),
-            dtype=float,
-        )
-
-        scaling = float(
-            np.asarray(
-                acados_solver.cost_get(
-                    j,
-                    "scaling",
-                )
-            ).squeeze()
-        )
-
-        residual = y - yref
-
-        # This also works if W is not perfectly diagonal:
-        # the sum of these terms equals
-        # 0.5 * residual.T @ W @ residual.
-
-        stage_terms = (
-            0.5
-            * scaling
-            * residual
-            * (W @ residual)
-        )
-
-        for y_index, component_index in component_map.items():
-
-            components[component_index] += (
-                stage_terms[y_index]
-            )
-
-        # Slack contribution
-
-        sl = acados_solver.get(
-            j,
-            "sl",
-        )
-
-        su = acados_solver.get(
-            j,
-            "su",
-        )
-
-        zl = acados_solver.cost_get(
-            j,
-            "zl",
-        )
-
-        zu = acados_solver.cost_get(
-            j,
-            "zu",
-        )
-
-        Zl = acados_solver.cost_get(
-            j,
-            "Zl",
-        )
-
-        Zu = acados_solver.cost_get(
-            j,
-            "Zu",
-        )
-
-        components[6] += scaling * (
-            _slack_cost(sl, zl, Zl)
-            + _slack_cost(su, zu, Zu)
-        )
-
-    # ----------------------------------------
-    # Terminal stage: j = N
-    # ----------------------------------------
-
-    x = np.asarray(
-        acados_solver.get(N, "x"),
-        dtype=float,
-    )
-
-    p = np.asarray(
-        acados_solver.get(N, "p"),
-        dtype=float,
-    )
-
-    X, Y, psi, v, delta = x
-
-    return_on = p[2]
-
-    lane_error = (
-        (Y - LANE_CENTER_1)
-        * (Y - LANE_CENTER_2)
-        / LANE_HALF_DISTANCE**2
-    )
-
-    return_error = (
-        return_on
-        * (Y - LANE_CENTER_1)
-        / (LANE_CENTER_2 - LANE_CENTER_1)
-    )
-
-    y_e = np.array([
-        X,
-        lane_error,
-        psi,
-        v,
-        delta,
-        return_error,
-    ])
-
-    yref_e = np.asarray(
-        acados_solver.cost_get(
-            N,
-            "yref",
-        ),
-        dtype=float,
-    )
-
-    W_e = np.asarray(
-        acados_solver.cost_get(
-            N,
-            "W",
-        ),
-        dtype=float,
-    )
-
-    scaling_e = float(
-        np.asarray(
-            acados_solver.cost_get(
-                N,
-                "scaling",
-            )
-        ).squeeze()
-    )
-
-    residual_e = y_e - yref_e
-
-    terminal_terms = (
+    # Lane
+    components[0] = (
         0.5
+        * W[1]
+        * np.sum(
+            scaling * lane_residual**2
+        )
+        + 0.5
         * scaling_e
-        * residual_e
-        * (W_e @ residual_e)
+        * W_e[1]
+        * lane_terminal**2
     )
 
-    terminal_map = {
-        1: 0,  # Lane
-        2: 1,  # Heading
-        3: 2,  # Velocity
-        5: 3,  # Return
-    }
+    # Heading
+    components[1] = (
+        0.5
+        * W[2]
+        * np.sum(
+            scaling * heading_residual**2
+        )
+        + 0.5
+        * scaling_e
+        * W_e[2]
+        * heading_terminal**2
+    )
 
-    for y_index, component_index in terminal_map.items():
+    # Velocity
+    components[2] = (
+        0.5
+        * W[3]
+        * np.sum(
+            scaling * velocity_residual**2
+        )
+        + 0.5
+        * scaling_e
+        * W_e[3]
+        * velocity_terminal**2
+    )
 
-        components[component_index] += (
-            terminal_terms[y_index]
+    # Steering rate
+    components[3] = (
+        0.5
+        * W[5]
+        * np.sum(
+            scaling
+            * steering_rate_residual**2
+        )
+    )
+
+    # Acceleration
+    components[4] = (
+        0.5
+        * W[6]
+        * np.sum(
+            scaling
+            * acceleration_residual**2
+        )
+    )
+
+    # --------------------------------------------------
+    # HJ slack cost
+    # --------------------------------------------------
+
+    if sl.size > 0:
+
+        components[5] += np.sum(
+            scaling
+            * (
+                0.5
+                * diagnostics["Zl"][0]
+                * sl**2
+                + diagnostics["zl"][0]
+                * sl
+            )
         )
 
+    if su.size > 0:
+
+        components[5] += np.sum(
+            scaling
+            * (
+                0.5
+                * diagnostics["Zu"][0]
+                * su**2
+                + diagnostics["zu"][0]
+                * su
+            )
+        )
+
+    # Exact total cost evaluated by acados
     total_cost = float(
         acados_solver.get_cost()
     )

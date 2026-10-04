@@ -59,32 +59,34 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     # Variabili da aggiornare durante la simulazione
     X_H = SX.sym("X_H")
     Y_H = SX.sym("Y_H")
-    RETURN_ON = SX.sym("RETURN_ON")
     M1 = SX.sym("M1")
     M2 = SX.sym("M2")
     B_HJ = SX.sym("B_HJ")
-    model.p = vertcat(X_H, Y_H, RETURN_ON, M1, M2, B_HJ)
+    model.p = vertcat(X_H, Y_H, M1, M2, B_HJ)
     ocp.model = model
     ocp.parameter_values = np.array([
         human_pos[0],
         human_pos[1],
-        0.0,   # RETURN_ON
         0.0,   # M1
         0.0,   # M2
         1.0,   # B_HJ
     ])
 
-    # Lane error
-    lane_error = (Y_E - LANE_CENTER_1) * (Y_E - LANE_CENTER_2) / (LANE_HALF_DISTANCE**2)
-
-    # Left lane penalty
-    left_lane_penalty = RETURN_ON * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
+    # Lane preferences
+    lane_error = (
+        0.000759549 * Y_E**7
+        - 0.0093316 * Y_E**6
+        + 0.0303819 * Y_E**5
+        + 0.0798611 * Y_E**4
+        - 0.696181 * Y_E**3
+        + 1.20486 * Y_E**2
+    )
 
     # Costi da controllare
     ocp.cost.cost_type = 'NONLINEAR_LS'
     ocp.cost.cost_type_e = 'NONLINEAR_LS'
-    model.cost_y_expr = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, left_lane_penalty, STEERING_RATE, ACCELERATION)
-    model.cost_y_expr_e = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, left_lane_penalty)
+    model.cost_y_expr = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, STEERING_RATE, ACCELERATION)
+    model.cost_y_expr_e = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E)
 
     # Pesi
     Q = np.diag([
@@ -92,8 +94,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
         weights["lane"],                   # lane error
         weights["psi"] / psi_max**2,       # psi
         weights["velocity"] / v_max**2,    # velocity
-        0.0,                                # delta
-        weights["return"],                 # left lane penalty
+        0.0,                               # delta
     ])
     R = np.diag([
         weights["steering_rate"] / steering_rate_max**2,   # steering rate
@@ -110,7 +111,6 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
         0.0,        # psi
         v_ref,      # v
         0.0,        # delta
-        0.0,        # left lane penalty
         0.0,        # steering rate
         0.0,        # acceleration
     ])
@@ -120,7 +120,6 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
         0.0,        # psi
         v_ref,      # v
         0.0,        # delta
-        0.0,        # left lane penalty
     ])
 
     # LIMITI FISICI
