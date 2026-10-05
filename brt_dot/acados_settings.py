@@ -74,8 +74,8 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     ])
 
     # Lane preferences
-    lane_error = (Y_E - LANE_CENTER_1)/(LANE_HALF_DISTANCE*2)
-    lane_preference = Y_E**2 * exp(-6.27915 - 2.49003*Y_E + 0.553844*Y_E**2)
+    lane_error = (Y_E - LANE_CENTER_1) * (Y_E - LANE_CENTER_2) / (LANE_HALF_DISTANCE**2)
+    lane_preference = RETURN_ON * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
 
     # Costi da controllare
     ocp.cost.cost_type = 'NONLINEAR_LS'
