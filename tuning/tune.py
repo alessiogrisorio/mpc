@@ -324,10 +324,11 @@ def main():
         seed=config.SEED
     )
 
+    study_name = f"{args.project}_lane_poly"
     study_path = ROOT / "tuning" / "results" / f"{args.project}.db"
 
     study = optuna.create_study(
-        study_name=args.project,
+        study_name=study_name,
         direction="minimize",
         sampler=sampler,
         storage=f"sqlite:///{study_path}",
@@ -449,7 +450,7 @@ def main():
 
     output_path = (
         results_dir
-        / f"{args.project}.json"
+        / f"{study_name}.json"
     )
 
     with open(

@@ -41,6 +41,7 @@ def _slack_cost(slack, z, Z):
 
 OCP_COST_COMPONENTS = (
     "Lane",
+    "Right lane preference",
     "Heading",
     "Velocity",
     "Steering rate",
@@ -49,17 +50,13 @@ OCP_COST_COMPONENTS = (
 )
 
 
-def _lane_error(y):
+def _lane_residuals(y):
 
-    return (
-        0.000759549 * y**7
-        - 0.0093316 * y**6
-        + 0.0303819 * y**5
-        + 0.0798611 * y**4
-        - 0.696181 * y**3
-        + 1.20486 * y**2
-    )
+    lane_error = y / 4.0
 
+    lane_preference = y**2 * np.exp(-6.27915 - 2.49003*y + 0.553844*y**2)
+
+    return lane_error, lane_preference
 
 def initialize_ocp_cost_diagnostics(
     acados_solver,
@@ -196,26 +193,30 @@ def compute_ocp_cost_diagnostics(
     psi = x[:, 2]
     velocity = x[:, 3]
 
-    lane_error = _lane_error(Y)
+    lane_error, lane_preference = _lane_residuals(Y)
 
     lane_residual = (
         lane_error[:-1] - yref[1]
     )
 
+    lane_preference_residual = (
+        lane_preference[:-1] - yref[2]
+    )
+
     heading_residual = (
-        psi[:-1] - yref[2]
+        psi[:-1] - yref[3]
     )
 
     velocity_residual = (
-        velocity[:-1] - yref[3]
+        velocity[:-1] - yref[4]
     )
 
     steering_rate_residual = (
-        u[:, 0] - yref[5]
+        u[:, 0] - yref[6]
     )
 
     acceleration_residual = (
-        u[:, 1] - yref[6]
+        u[:, 1] - yref[7]
     )
 
     # Terminal residuals
@@ -223,12 +224,16 @@ def compute_ocp_cost_diagnostics(
         lane_error[-1] - yref_e[1]
     )
 
+    lane_preference_terminal = (
+        lane_preference[-1] - yref_e[2]
+    )
+
     heading_terminal = (
-        psi[-1] - yref_e[2]
+        psi[-1] - yref_e[3]
     )
 
     velocity_terminal = (
-        velocity[-1] - yref_e[3]
+        velocity[-1] - yref_e[4]
     )
 
     # --------------------------------------------------
@@ -239,62 +244,65 @@ def compute_ocp_cost_diagnostics(
         len(OCP_COST_COMPONENTS)
     )
 
-    # Lane
+    # Lane centers
     components[0] = (
         0.5
         * W[1]
-        * np.sum(
-            scaling * lane_residual**2
-        )
+        * np.sum(scaling * lane_residual**2)
         + 0.5
         * scaling_e
         * W_e[1]
         * lane_terminal**2
     )
 
-    # Heading
+    # Right-lane preference
     components[1] = (
         0.5
         * W[2]
-        * np.sum(
-            scaling * heading_residual**2
-        )
+        * np.sum(scaling * lane_preference_residual**2)
         + 0.5
         * scaling_e
         * W_e[2]
+        * lane_preference_terminal**2
+    )
+
+    # Heading
+    components[2] = (
+        0.5
+        * W[3]
+        * np.sum(scaling * heading_residual**2)
+        + 0.5
+        * scaling_e
+        * W_e[3]
         * heading_terminal**2
     )
 
     # Velocity
-    components[2] = (
+    components[3] = (
         0.5
-        * W[3]
-        * np.sum(
-            scaling * velocity_residual**2
-        )
+        * W[4]
+        * np.sum(scaling * velocity_residual**2)
         + 0.5
         * scaling_e
-        * W_e[3]
+        * W_e[4]
         * velocity_terminal**2
     )
 
     # Steering rate
-    components[3] = (
-        0.5
-        * W[5]
-        * np.sum(
-            scaling
-            * steering_rate_residual**2
-        )
-    )
-
-    # Acceleration
     components[4] = (
         0.5
         * W[6]
         * np.sum(
-            scaling
-            * acceleration_residual**2
+            scaling * steering_rate_residual**2
+        )
+    )
+
+    # Acceleration
+    components[5] = (
+        0.5
+        * W[7]
+        * np.sum(
+            scaling * acceleration_residual**2
         )
     )
 
@@ -304,7 +312,7 @@ def compute_ocp_cost_diagnostics(
 
     if sl.size > 0:
 
-        components[5] += np.sum(
+        components[6] += np.sum(
             scaling
             * (
                 0.5
@@ -317,7 +325,7 @@ def compute_ocp_cost_diagnostics(
 
     if su.size > 0:
 
-        components[5] += np.sum(
+        components[6] += np.sum(
             scaling
             * (
                 0.5

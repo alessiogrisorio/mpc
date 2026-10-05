@@ -19,7 +19,7 @@ HJ_STAGES = 3
 def run_simulation(
     weights=None,
     scenario=None,
-    make_plots=False,
+    make_plots=True,
     make_animation=True,
     raise_on_fail=True,
 ):
@@ -186,7 +186,7 @@ def run_simulation(
         sl = acados_solver.get(0, "sl")
         su = acados_solver.get(0, "su")
         simHJSlack[i] = sl[0] if len(sl) > 0 else 0.0
-        simHJSlackUpper[i] = su[0] if len(sl) > 0 else 0.0
+        simHJSlackUpper[i] = su[0] if len(su) > 0 else 0.0
         if make_plots:
             total_cost, components = compute_ocp_cost_diagnostics(acados_solver, cost_diagnostic)
             simOcpCost.append(total_cost)
