@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 brt_type = "euclidean.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
-V_thr = 1
+ALPHA_HJ = 0.5
 HJ_STAGES = 3
 
 def run_simulation(
@@ -141,10 +141,11 @@ def run_simulation(
 
         # Valutazione BRT
         simV[i], simGradV[i], simInsideGrid[i] = brt.evaluate(relative_state)
-        hj_active = simInsideGrid[i] and simV[i] <= V_thr
+        hj_active = simInsideGrid[i]
         simHJActive[i] = hj_active
         if hj_active:
             M_HJ, b_HJ = hj_coefficients(relative_state, simGradV[i], brt.dynamics_parameters)
+            b_HJ += ALPHA_HJ * simV[i]
         else:
             M_HJ = np.zeros(2)
             b_HJ = 1.0
@@ -215,6 +216,7 @@ def run_simulation(
     if make_plots:
         simOcpCost = np.asarray(simOcpCost)
         simOcpCostComponents = np.asarray(simOcpCostComponents)
+        simHJSlackActive = simHJActive & (np.maximum(simHJSlack, simHJSlackUpper) > 1e-6)
         plot_results(
             dt,
             simX,
@@ -222,8 +224,7 @@ def run_simulation(
             v_ref,
             v_H,
             simV,
-            simHJActive,
-            V_thr,
+            simHJSlackActive,
         )
         plot_return_discount(dt, simReturnDiscount)
         plot_ocp_diagnostics(
@@ -232,7 +233,7 @@ def run_simulation(
             simOcpCostComponents,
             simHJSlack,
             simHJSlackUpper,
-            simHJActive,
+            simHJSlackActive,
         )
     animation = None
     if make_animation:

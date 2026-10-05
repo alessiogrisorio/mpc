@@ -245,7 +245,7 @@ def plot_ocp_diagnostics(
                 alpha=0.7,
                 linewidth=0,
                 label=(
-                    "HJ active"
+                    "HJ imposed"
                     if k == 0
                     else None
                 ),
@@ -357,7 +357,6 @@ def plot_results(
     v_H,
     simV,
     simHJActive,
-    V_thr,
 ):
 
     t_x = np.arange(len(simX)) * dt
@@ -388,7 +387,7 @@ def plot_results(
             color="#fff2b2",
             alpha=0.7,
             linewidth=0,
-            label="HJ active" if k == 0 else None,
+            label="HJ imposed" if k == 0 else None,
             zorder=0,
         )
 
@@ -398,12 +397,6 @@ def plot_results(
         color="black",
         linestyle="--",
         label="V = 0",
-    )
-    ax_brt.axhline(
-        V_thr,
-        color="tab:red",
-        linestyle=":",
-        label="Activation threshold",
     )
     ax_brt.set_xlim(t_x[0], t_x[-1])
     ax_brt.set_xlabel("Time [s]")
