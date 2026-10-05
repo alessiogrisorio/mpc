@@ -5,7 +5,6 @@ from acados_settings import EGO_LENGTH, HUMAN_LENGTH, safety_r
 
 WEIGHT_BOUNDS = {
     "lane": (0.2, 20.0),
-    "lane_preference": (0.05, 1.5),
     "psi": (0.06, 6.0),
     "velocity": (50.0, 2000.0),
     "steering_rate": (0.001, 0.1),
@@ -14,7 +13,6 @@ WEIGHT_BOUNDS = {
 
 BASELINE_WEIGHTS = {
     "lane": 3.890810431104229,
-    "lane_preference": 1.0,
     "psi": 1.4467453645031252,
     "velocity": 56.477006267018474,
     "steering_rate": 0.09888880927846047,

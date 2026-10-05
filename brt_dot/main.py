@@ -3,7 +3,7 @@ import time
 import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
-from acados_settings import acados_settings, EGO_LENGTH, HUMAN_LENGTH, safety_r
+from acados_settings import acados_settings, EGO_LENGTH, HUMAN_LENGTH, safety_r, D_START, D_CLEAR, W_IN, W_OUT, GAMMA_MIN
 from animation import animate_simulation, plot_results, initialize_ocp_cost_diagnostics, compute_ocp_cost_diagnostics, plot_ocp_diagnostics, plot_return_discount
 from pathlib import Path
 from brt_utils import BRTinterpolator, hj_coefficients
@@ -115,6 +115,7 @@ def run_simulation(
     simHJSlackUpper = np.zeros(Nsim)
     simOcpCost = [] if make_plots else None
     simOcpCostComponents = [] if make_plots else None
+    simReturnDiscount = np.full(Nsim, np.nan)
 
     # Simulation
     for i in range(Nsim):
@@ -149,6 +150,7 @@ def run_simulation(
             b_HJ = 1.0
 
         # Human prediction over MPC horizon
+        human_prediction = X_H_current + v_H * np.arange(N + 1) * dt_ocp
         for j in range(N + 1):
             if hj_active and j < HJ_STAGES:
                 hj_parameters = [M_HJ[0], M_HJ[1], b_HJ]
@@ -188,7 +190,7 @@ def run_simulation(
         simHJSlack[i] = sl[0] if len(sl) > 0 else 0.0
         simHJSlackUpper[i] = su[0] if len(su) > 0 else 0.0
         if make_plots:
-            total_cost, components = compute_ocp_cost_diagnostics(acados_solver, cost_diagnostic)
+            total_cost, components = compute_ocp_cost_diagnostics(acados_solver, cost_diagnostic, human_prediction)
             simOcpCost.append(total_cost)
             simOcpCostComponents.append(components)
 

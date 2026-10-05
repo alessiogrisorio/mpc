@@ -8,7 +8,6 @@ from matplotlib.patches import Circle, Polygon
 
 
 from acados_settings import (
-    return_discount,
     EGO_LENGTH,
     EGO_WIDTH,
     HUMAN_LENGTH,
@@ -17,6 +16,11 @@ from acados_settings import (
     ROAD_Y_MIN,
     LANE_CENTER_1,
     LANE_CENTER_2,
+    D_START,
+    D_CLEAR,
+    W_IN,
+    W_OUT,
+    GAMMA_MIN,
 )
 
 
@@ -144,7 +148,13 @@ def compute_ocp_cost_diagnostics(acados_solver, diagnostics, human_prediction):
     N = diagnostics["N"]
     x = np.asarray(acados_solver.get_flat("x"), dtype=float).reshape(N + 1, 5)
     u = np.asarray(acados_solver.get_flat("u"), dtype=float).reshape(N, 2)
-    gamma = return_discount(np.asarray(human_prediction) - x[:, 0])
+    distance = np.asarray(human_prediction) - x[:, 0]
+
+    gamma = 1.0 - (1.0 - GAMMA_MIN) * (
+        0.5 * (1.0 + np.tanh((D_START - distance) / (2.0 * W_IN)))
+    ) * (
+        0.5 * (1.0 + np.tanh((distance + D_CLEAR) / (2.0 * W_OUT)))
+    )
     lane_error = np.sqrt(gamma) * (x[:, 1] - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
     residuals = np.column_stack((x[:, 0], lane_error, x[:, 2:]))
     stage_residuals = np.column_stack((residuals[:-1], u)) - diagnostics["yref"]
