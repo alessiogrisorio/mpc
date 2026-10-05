@@ -21,6 +21,7 @@ from acados_settings import (
     W_IN,
     W_OUT,
     GAMMA_MIN,
+    EDGE_MARGIN,
 )
 
 
@@ -49,6 +50,7 @@ def _slack_cost(slack, z, Z):
 
 OCP_COST_COMPONENTS = (
     "Right lane preference",
+    "Road edge",
     "Heading",
     "Velocity",
     "Steering rate",
@@ -156,7 +158,15 @@ def compute_ocp_cost_diagnostics(acados_solver, diagnostics, human_prediction):
         0.5 * (1.0 + np.tanh((distance + D_CLEAR) / (2.0 * W_OUT)))
     )
     lane_error = np.sqrt(gamma) * (x[:, 1] - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
-    residuals = np.column_stack((x[:, 0], lane_error, x[:, 2:]))
+    lateral_extent = (
+        0.5 * EGO_LENGTH * np.abs(np.sin(x[:, 2]))
+        + 0.5 * EGO_WIDTH * np.abs(np.cos(x[:, 2]))
+    )
+    edge_error = (
+        np.maximum(0.0, ROAD_Y_MIN + EDGE_MARGIN - (x[:, 1] - lateral_extent))
+        + np.maximum(0.0, x[:, 1] + lateral_extent - (ROAD_Y_MAX - EDGE_MARGIN))
+    ) / EDGE_MARGIN
+    residuals = np.column_stack((x[:, 0], lane_error, edge_error, x[:, 2:]))
     stage_residuals = np.column_stack((residuals[:-1], u)) - diagnostics["yref"]
     terminal_residuals = residuals[-1] - diagnostics["yref_e"]
     stage_costs = 0.5 * np.sum(
@@ -165,12 +175,12 @@ def compute_ocp_cost_diagnostics(acados_solver, diagnostics, human_prediction):
     )
     terminal_costs = 0.5 * diagnostics["scaling_e"] * diagnostics["W_e"] * terminal_residuals**2
     components = np.zeros(len(OCP_COST_COMPONENTS))
-    components[:3] = stage_costs[1:4] + terminal_costs[1:4]
-    components[3:5] = stage_costs[5:7]
+    components[:4] = stage_costs[1:5] + terminal_costs[1:5]
+    components[4:6] = stage_costs[6:8]
     for field, linear, quadratic in (("sl", "zl", "Zl"), ("su", "zu", "Zu")):
         slack = np.asarray(acados_solver.get_flat(field), dtype=float).reshape(-1)
         if slack.size:
-            components[5] += np.sum(
+            components[6] += np.sum(
                 diagnostics["scaling"] * (
                     0.5 * diagnostics[quadratic][0] * slack**2
                     + diagnostics[linear][0] * slack

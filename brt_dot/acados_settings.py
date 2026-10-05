@@ -45,7 +45,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
         weights = {
             #"lane": 3.890810431104229,
             "lane": 3.890810431104229,
-            "edge": 1.0,
+            "edge": 30.0,
             "psi": 1.4467453645031252,
             "velocity": 56.477006267018474,
             "steering_rate": 0.09888880927846047,
