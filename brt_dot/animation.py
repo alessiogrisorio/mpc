@@ -6,13 +6,17 @@ import numpy as np
 from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Circle, Polygon
 
+
 from acados_settings import (
+    return_discount,
     EGO_LENGTH,
     EGO_WIDTH,
     HUMAN_LENGTH,
     HUMAN_WIDTH,
     ROAD_Y_MAX,
     ROAD_Y_MIN,
+    LANE_CENTER_1,
+    LANE_CENTER_2,
 )
 
 
@@ -40,7 +44,6 @@ def _slack_cost(slack, z, Z):
 
 
 OCP_COST_COMPONENTS = (
-    "Lane",
     "Right lane preference",
     "Heading",
     "Velocity",
@@ -49,14 +52,6 @@ OCP_COST_COMPONENTS = (
     "HJ slack",
 )
 
-
-def _lane_residuals(y):
-
-    lane_error = y / 4.0
-
-    lane_preference = y**2 * np.exp(-6.27915 - 2.49003*y + 0.553844*y**2)
-
-    return lane_error, lane_preference
 
 def initialize_ocp_cost_diagnostics(
     acados_solver,
@@ -145,203 +140,42 @@ def initialize_ocp_cost_diagnostics(
     }
 
 
-def compute_ocp_cost_diagnostics(
-    acados_solver,
-    diagnostics,
-):
-
+def compute_ocp_cost_diagnostics(acados_solver, diagnostics, human_prediction):
     N = diagnostics["N"]
-
-    W = diagnostics["W"]
-    W_e = diagnostics["W_e"]
-
-    yref = diagnostics["yref"]
-    yref_e = diagnostics["yref_e"]
-
-    scaling = diagnostics["scaling"]
-    scaling_e = diagnostics["scaling_e"]
-
-    # --------------------------------------------------
-    # Retrieve the whole optimal prediction
-    # --------------------------------------------------
-
-    x = np.asarray(
-        acados_solver.get_flat("x"),
-        dtype=float,
-    ).reshape(N + 1, 5)
-
-    u = np.asarray(
-        acados_solver.get_flat("u"),
-        dtype=float,
-    ).reshape(N, 2)
-
-    sl = np.asarray(
-        acados_solver.get_flat("sl"),
-        dtype=float,
-    ).reshape(-1)
-
-    su = np.asarray(
-        acados_solver.get_flat("su"),
-        dtype=float,
-    ).reshape(-1)
-
-    # --------------------------------------------------
-    # Residuals over the complete prediction horizon
-    # --------------------------------------------------
-
-    Y = x[:, 1]
-    psi = x[:, 2]
-    velocity = x[:, 3]
-
-    lane_error, lane_preference = _lane_residuals(Y)
-
-    lane_residual = (
-        lane_error[:-1] - yref[1]
+    x = np.asarray(acados_solver.get_flat("x"), dtype=float).reshape(N + 1, 5)
+    u = np.asarray(acados_solver.get_flat("u"), dtype=float).reshape(N, 2)
+    gamma = return_discount(np.asarray(human_prediction) - x[:, 0])
+    lane_error = np.sqrt(gamma) * (x[:, 1] - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
+    residuals = np.column_stack((x[:, 0], lane_error, x[:, 2:]))
+    stage_residuals = np.column_stack((residuals[:-1], u)) - diagnostics["yref"]
+    terminal_residuals = residuals[-1] - diagnostics["yref_e"]
+    stage_costs = 0.5 * np.sum(
+        diagnostics["scaling"][:, None] * diagnostics["W"] * stage_residuals**2,
+        axis=0,
     )
-
-    lane_preference_residual = (
-        lane_preference[:-1] - yref[2]
-    )
-
-    heading_residual = (
-        psi[:-1] - yref[3]
-    )
-
-    velocity_residual = (
-        velocity[:-1] - yref[4]
-    )
-
-    steering_rate_residual = (
-        u[:, 0] - yref[6]
-    )
-
-    acceleration_residual = (
-        u[:, 1] - yref[7]
-    )
-
-    # Terminal residuals
-    lane_terminal = (
-        lane_error[-1] - yref_e[1]
-    )
-
-    lane_preference_terminal = (
-        lane_preference[-1] - yref_e[2]
-    )
-
-    heading_terminal = (
-        psi[-1] - yref_e[3]
-    )
-
-    velocity_terminal = (
-        velocity[-1] - yref_e[4]
-    )
-
-    # --------------------------------------------------
-    # Cost decomposition
-    # --------------------------------------------------
-
-    components = np.zeros(
-        len(OCP_COST_COMPONENTS)
-    )
-
-    # Lane centers
-    components[0] = (
-        0.5
-        * W[1]
-        * np.sum(scaling * lane_residual**2)
-        + 0.5
-        * scaling_e
-        * W_e[1]
-        * lane_terminal**2
-    )
-
-    # Right-lane preference
-    components[1] = (
-        0.5
-        * W[2]
-        * np.sum(scaling * lane_preference_residual**2)
-        + 0.5
-        * scaling_e
-        * W_e[2]
-        * lane_preference_terminal**2
-    )
-
-    # Heading
-    components[2] = (
-        0.5
-        * W[3]
-        * np.sum(scaling * heading_residual**2)
-        + 0.5
-        * scaling_e
-        * W_e[3]
-        * heading_terminal**2
-    )
-
-    # Velocity
-    components[3] = (
-        0.5
-        * W[4]
-        * np.sum(scaling * velocity_residual**2)
-        + 0.5
-        * scaling_e
-        * W_e[4]
-        * velocity_terminal**2
-    )
-
-    # Steering rate
-    components[4] = (
-        0.5
-        * W[6]
-        * np.sum(
-            scaling * steering_rate_residual**2
-        )
-    )
-
-    # Acceleration
-    components[5] = (
-        0.5
-        * W[7]
-        * np.sum(
-            scaling * acceleration_residual**2
-        )
-    )
-
-    # --------------------------------------------------
-    # HJ slack cost
-    # --------------------------------------------------
-
-    if sl.size > 0:
-
-        components[6] += np.sum(
-            scaling
-            * (
-                0.5
-                * diagnostics["Zl"][0]
-                * sl**2
-                + diagnostics["zl"][0]
-                * sl
+    terminal_costs = 0.5 * diagnostics["scaling_e"] * diagnostics["W_e"] * terminal_residuals**2
+    components = np.zeros(len(OCP_COST_COMPONENTS))
+    components[:3] = stage_costs[1:4] + terminal_costs[1:4]
+    components[3:5] = stage_costs[5:7]
+    for field, linear, quadratic in (("sl", "zl", "Zl"), ("su", "zu", "Zu")):
+        slack = np.asarray(acados_solver.get_flat(field), dtype=float).reshape(-1)
+        if slack.size:
+            components[5] += np.sum(
+                diagnostics["scaling"] * (
+                    0.5 * diagnostics[quadratic][0] * slack**2
+                    + diagnostics[linear][0] * slack
+                )
             )
-        )
+    return float(acados_solver.get_cost()), components
 
-    if su.size > 0:
 
-        components[6] += np.sum(
-            scaling
-            * (
-                0.5
-                * diagnostics["Zu"][0]
-                * su**2
-                + diagnostics["zu"][0]
-                * su
-            )
-        )
-
-    # Exact total cost evaluated by acados
-    total_cost = float(
-        acados_solver.get_cost()
-    )
-
-    return total_cost, components
+def plot_return_discount(dt, discount):
+    fig, ax = plt.subplots(figsize=(10, 3), layout="constrained")
+    ax.plot(np.arange(len(discount)) * dt, discount)
+    ax.set(xlabel="Time [s]", ylabel=r"$\gamma_R$", ylim=(0.0, 1.05))
+    ax.set_title("Right lane preference discount")
+    ax.grid(True)
+    return fig
 
 
 def plot_ocp_diagnostics(

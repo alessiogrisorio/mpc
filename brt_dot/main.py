@@ -4,7 +4,7 @@ import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
 from acados_settings import acados_settings, EGO_LENGTH, HUMAN_LENGTH, safety_r
-from animation import animate_simulation, plot_results, initialize_ocp_cost_diagnostics, compute_ocp_cost_diagnostics, plot_ocp_diagnostics
+from animation import animate_simulation, plot_results, initialize_ocp_cost_diagnostics, compute_ocp_cost_diagnostics, plot_ocp_diagnostics, plot_return_discount
 from pathlib import Path
 from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
@@ -223,6 +223,7 @@ def run_simulation(
             simHJActive,
             V_thr,
         )
+        plot_return_discount(dt, simReturnDiscount)
         plot_ocp_diagnostics(
             dt,
             simOcpCost,
@@ -260,6 +261,7 @@ def run_simulation(
         "simGradV": simGradV,
         "simInsideGrid": simInsideGrid,
         "simHJActive": simHJActive,
+        "simReturnDiscount": simReturnDiscount,
         "simHJResidual": simHJResidual,
         "simHJSlack": simHJSlack,
         "simHJSlackUpper": simHJSlackUpper,

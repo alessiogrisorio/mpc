@@ -2,7 +2,7 @@ import numpy as np
 import scipy.linalg
 
 from acados_template import AcadosOcp, AcadosOcpSolver
-from casadi import SX, vertcat, cos, sin, exp, if_else
+from casadi import SX, vertcat, cos, sin, exp, if_else, tanh, sqrt
 
 from ego_model import ego_model
 
@@ -30,6 +30,13 @@ v_max = 2.0
 steering_rate_max = 0.087
 acc_max = 3.0
 
+# Return policy
+D_START = 15.0
+D_CLEAR = 5.0
+W_IN = 2.0
+W_OUT = 2.0
+GAMMA_MIN = 0.05
+
 
 def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
 
@@ -37,7 +44,6 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
         weights = {
             #"lane": 3.890810431104229,
             "lane": 3.890810431104229,
-            "lane_preference": 1000.0,
             "psi": 1.4467453645031252,
             "velocity": 56.477006267018474,
             "steering_rate": 0.09888880927846047,
@@ -74,20 +80,19 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     ])
 
     # Lane preferences
-    lane_error = (Y_E - LANE_CENTER_1) * (Y_E - LANE_CENTER_2) / (LANE_HALF_DISTANCE**2)
-    lane_preference = RETURN_ON * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
+    gamma_R = 1.0 - (1.0 - GAMMA_MIN) * (0.5 * (1.0 + tanh((D_START - (X_H-X_E)) / (2.0 * W_IN)))) * (0.5 * (1.0 + tanh(((X_H-X_E) + D_CLEAR) / (2.0 * W_OUT))))
+    lane_error = sqrt(gamma_R) * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
 
     # Costi da controllare
     ocp.cost.cost_type = 'NONLINEAR_LS'
     ocp.cost.cost_type_e = 'NONLINEAR_LS'
-    model.cost_y_expr = vertcat(X_E, lane_error, lane_preference, PSI_E, V_E, DELTA_E, STEERING_RATE, ACCELERATION)
-    model.cost_y_expr_e = vertcat(X_E, lane_error, lane_preference, PSI_E, V_E, DELTA_E)
+    model.cost_y_expr = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E, STEERING_RATE, ACCELERATION)
+    model.cost_y_expr_e = vertcat(X_E, lane_error, PSI_E, V_E, DELTA_E)
 
     # Pesi
     Q = np.diag([
         0.0,     # X
         weights["lane"],                   # lane error
-        weights["lane_preference"],        # lane preference
         weights["psi"] / psi_max**2,       # psi
         weights["velocity"] / v_max**2,    # velocity
         0.0,                               # delta
@@ -104,7 +109,6 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     ocp.cost.yref = np.array([
         0.0,        # X
         0.0,        # lane error
-        0.0,        # lane preference
         0.0,        # psi
         v_ref,      # v
         0.0,        # delta
@@ -114,7 +118,6 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     ocp.cost.yref_e = np.array([
         0.0,        # X
         0.0,        # lane error
-        0.0,        # lane preference
         0.0,        # psi
         v_ref,      # v
         0.0,        # delta
