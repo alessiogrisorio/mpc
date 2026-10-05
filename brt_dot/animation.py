@@ -16,6 +16,7 @@ from acados_settings import (
     ROAD_Y_MIN,
     LANE_CENTER_1,
     LANE_CENTER_2,
+    LANE_HALF_DISTANCE,
     D_START,
     D_CLEAR,
     W_IN,
@@ -49,8 +50,8 @@ def _slack_cost(slack, z, Z):
 
 
 OCP_COST_COMPONENTS = (
+    "Lane centers",
     "Right lane preference",
-    "Road edge",
     "Heading",
     "Velocity",
     "Steering rate",
@@ -157,16 +158,22 @@ def compute_ocp_cost_diagnostics(acados_solver, diagnostics, human_prediction):
     ) * (
         0.5 * (1.0 + np.tanh((distance + D_CLEAR) / (2.0 * W_OUT)))
     )
-    lane_error = np.sqrt(gamma) * (x[:, 1] - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
-    lateral_extent = (
-        0.5 * EGO_LENGTH * np.abs(np.sin(x[:, 2]))
-        + 0.5 * EGO_WIDTH * np.abs(np.cos(x[:, 2]))
+    lane_error = (
+        (x[:, 1] - LANE_CENTER_1)
+        * (x[:, 1] - LANE_CENTER_2)
+    ) / LANE_HALF_DISTANCE**2
+    return_error = (
+        np.sqrt(gamma)
+        * (x[:, 1] - LANE_CENTER_1)
+        / (LANE_CENTER_2 - LANE_CENTER_1)
     )
-    edge_error = (
-        np.maximum(0.0, ROAD_Y_MIN + EDGE_MARGIN - (x[:, 1] - lateral_extent))
-        + np.maximum(0.0, x[:, 1] + lateral_extent - (ROAD_Y_MAX - EDGE_MARGIN))
-    ) / EDGE_MARGIN
-    residuals = np.column_stack((x[:, 0], lane_error, edge_error, x[:, 2:]))
+
+    residuals = np.column_stack((
+        x[:, 0],
+        lane_error,
+        return_error,
+        x[:, 2:],
+    ))
     stage_residuals = np.column_stack((residuals[:-1], u)) - diagnostics["yref"]
     terminal_residuals = residuals[-1] - diagnostics["yref_e"]
     stage_costs = 0.5 * np.sum(
