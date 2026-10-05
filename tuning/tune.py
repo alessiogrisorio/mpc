@@ -129,6 +129,7 @@ def evaluate_weights(
         "control_effort",
         "smoothness",
         "lane_return",
+        "edge",
         "hj_slack",
         "overtake_penalty",
         "failure_penalty",
@@ -324,8 +325,11 @@ def main():
         seed=config.SEED
     )
 
-    study_name = f"{args.project}_lane_poly"
-    study_path = ROOT / "tuning" / "results" / f"{args.project}.db"
+    results_dir = ROOT / "tuning" / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    study_name = f"{args.project}_continuous_edge_v1"
+    study_path = results_dir / f"{study_name}.db"
 
     study = optuna.create_study(
         study_name=study_name,

@@ -1,6 +1,14 @@
 import numpy as np
 
-from acados_settings import EGO_LENGTH, HUMAN_LENGTH, safety_r
+from acados_settings import (
+    EGO_LENGTH,
+    EGO_WIDTH,
+    HUMAN_LENGTH,
+    safety_r,
+    ROAD_Y_MIN,
+    ROAD_Y_MAX,
+    EDGE_MARGIN,
+)
 
 
 WEIGHT_BOUNDS = {
@@ -38,17 +46,36 @@ SEED = 42
 
 def generate_scenarios(n_scenarios, seed):
     rng = np.random.default_rng(seed)
-
     scenarios = []
 
-    for _ in range(n_scenarios):
+    Tsim = 20.0
+    maneuver_buffer = 5.0
 
+    required_lead = (
+        EGO_LENGTH / 4.0
+        + HUMAN_LENGTH / 4.0
+        + safety_r
+    )
+
+    while len(scenarios) < n_scenarios:
         v_ref = rng.uniform(*SCENARIO_RANGES["v_ref"])
         v_ego_initial = rng.uniform(*SCENARIO_RANGES["v_ego_initial"])
         v_human = rng.uniform(*SCENARIO_RANGES["v_human"])
         human_distance = rng.uniform(*SCENARIO_RANGES["human_distance"])
 
-        scenario = {
+        relative_speed = v_ref - v_human
+
+        if relative_speed <= 0.0:
+            continue
+
+        nominal_overtake_time = (
+            human_distance + required_lead
+        ) / relative_speed
+
+        if nominal_overtake_time > Tsim - maneuver_buffer:
+            continue
+
+        scenarios.append({
             "v_ref": float(v_ref),
             "x0": [
                 0.0,
@@ -60,10 +87,8 @@ def generate_scenarios(n_scenarios, seed):
             "X_H_initial": float(human_distance),
             "Y_H_initial": 0.0,
             "v_H": float(v_human),
-            "Tsim": 20.0,
-        }
-
-        scenarios.append(scenario)
+            "Tsim": Tsim,
+        })
 
     return scenarios
 
@@ -96,6 +121,26 @@ def score_components(result, scenario):
     simX = result["simX"]
     simU = result["simU"]
     dt = result["dt"]
+
+    # Vicinanza della carrozzeria ai bordi
+    lateral_extent = (
+        0.5 * EGO_LENGTH * np.abs(np.sin(simX[:, 2]))
+        + 0.5 * EGO_WIDTH * np.abs(np.cos(simX[:, 2]))
+    )
+
+    edge_error = (
+        np.maximum(
+            0.0,
+            ROAD_Y_MIN + EDGE_MARGIN - (simX[:, 1] - lateral_extent),
+        )
+        + np.maximum(
+            0.0,
+            simX[:, 1] + lateral_extent - (ROAD_Y_MAX - EDGE_MARGIN),
+        )
+    ) / EDGE_MARGIN
+
+    edge_rms = np.sqrt(np.mean(edge_error**2))
+    edge_peak = np.max(edge_error)
 
     v_ref = scenario["v_ref"]
     v_H = scenario["v_H"]
@@ -175,6 +220,7 @@ def score_components(result, scenario):
     smoothness_cost = 0.30 * smoothness
     lane_cost = 2.0 * lane_return
     hj_cost = 10.0 * hj_slack
+    edge_cost = 2.0 * edge_rms + edge_peak
 
     failure_penalty = 0.0
 
@@ -186,6 +232,7 @@ def score_components(result, scenario):
         + hj_cost
         + overtake_penalty
         + failure_penalty
+        + edge_cost
     )
 
     return {
@@ -197,6 +244,7 @@ def score_components(result, scenario):
         "overtake_penalty": float(overtake_penalty),
         "failure_penalty": float(failure_penalty),
         "total": float(total),
+        "edge": float(edge_cost),
     }
 
 

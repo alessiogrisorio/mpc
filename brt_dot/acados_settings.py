@@ -20,6 +20,7 @@ safety_r = rho_E + rho_H
 # Road dimensions
 ROAD_Y_MIN = -2.0
 ROAD_Y_MAX = 6.0
+TOL_ROAD = 0.3
 LANE_CENTER_1 = 0.0
 LANE_CENTER_2 = 4.0
 LANE_HALF_DISTANCE = (LANE_CENTER_2 - LANE_CENTER_1) / 2
@@ -45,11 +46,11 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
         weights = {
             #"lane": 3.890810431104229,
             "lane": 3.890810431104229,
-            "edge": 30.0,
             "psi": 1.4467453645031252,
             "velocity": 56.477006267018474,
+            "return": 21.6320882587589,
             "steering_rate": 0.09888880927846047,
-            "acceleration": 13.887061909157946,
+            "acceleration": 13.887061909157946
         }
 
     # Create ocp and model
@@ -83,25 +84,22 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
 
     # Lane preferences
     gamma_R = 1.0 - (1.0 - GAMMA_MIN) * (0.5 * (1.0 + tanh((D_START - (X_H-X_E)) / (2.0 * W_IN)))) * (0.5 * (1.0 + tanh(((X_H-X_E) + D_CLEAR) / (2.0 * W_OUT))))
-    lane_error = sqrt(gamma_R) * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
+    return_on = sqrt(gamma_R) * (Y_E - LANE_CENTER_1) / (LANE_CENTER_2 - LANE_CENTER_1)
 
     # Scoraggiare movimento vicino ai bordi
-    edge = (
-        fmax(0.0, ROAD_Y_MIN + EDGE_MARGIN - (Y_E - (0.5 * EGO_LENGTH * fabs(sin(PSI_E)) + 0.5 * EGO_WIDTH * fabs(cos(PSI_E)))))
-        + fmax(0.0, Y_E + (0.5 * EGO_LENGTH * fabs(sin(PSI_E)) + 0.5 * EGO_WIDTH * fabs(cos(PSI_E))) - (ROAD_Y_MAX-EDGE_MARGIN))
-    ) / EDGE_MARGIN
+    lane_error = ((Y_E - LANE_CENTER_1)*(Y_E - LANE_CENTER_2)) / LANE_HALF_DISTANCE**2
 
     # Costi da controllare
     ocp.cost.cost_type = 'NONLINEAR_LS'
     ocp.cost.cost_type_e = 'NONLINEAR_LS'
-    model.cost_y_expr = vertcat(X_E, lane_error, edge, PSI_E, V_E, DELTA_E, STEERING_RATE, ACCELERATION)
-    model.cost_y_expr_e = vertcat(X_E, lane_error, edge, PSI_E, V_E, DELTA_E)
+    model.cost_y_expr = vertcat(X_E, lane_error, return_on, PSI_E, V_E, DELTA_E, STEERING_RATE, ACCELERATION)
+    model.cost_y_expr_e = vertcat(X_E, lane_error, return_on, PSI_E, V_E, DELTA_E)
 
     # Pesi
     Q = np.diag([
         0.0,     # X
         weights["lane"],                   # lane error
-        weights["edge"],                   # edge error
+        weights["return"],                   # return
         weights["psi"] / psi_max**2,       # psi
         weights["velocity"] / v_max**2,    # velocity
         0.0,                               # delta
@@ -187,15 +185,15 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     model.con_h_expr_e = vertcat(separation, street_bounds)
 
     # Limiti dei vincoli collisione e HJ
-    ocp.constraints.lh = np.concatenate([np.zeros(5), np.full(4, ROAD_Y_MIN)])
-    ocp.constraints.uh = np.concatenate([np.full(5, 1e15), np.full(4, ROAD_Y_MAX)])
+    ocp.constraints.lh = np.concatenate([np.zeros(5), np.full(4, ROAD_Y_MIN + TOL_ROAD)])
+    ocp.constraints.uh = np.concatenate([np.full(5, 1e15), np.full(4, ROAD_Y_MAX - TOL_ROAD)])
 
     ocp.constraints.lh_0 = ocp.constraints.lh.copy()
     ocp.constraints.uh_0 = ocp.constraints.uh.copy()
 
     # Vincolo terminale solo su collisione
-    ocp.constraints.lh_e = np.concatenate([np.zeros(4), np.full(4, ROAD_Y_MIN)])
-    ocp.constraints.uh_e = np.concatenate([np.full(4, 1e15), np.full(4, ROAD_Y_MAX)])
+    ocp.constraints.lh_e = np.concatenate([np.zeros(4), np.full(4, ROAD_Y_MIN + TOL_ROAD)])
+    ocp.constraints.uh_e = np.concatenate([np.full(4, 1e15), np.full(4, ROAD_Y_MAX - TOL_ROAD)])
 
     # Soft constraint su HJ, indice 4
     ocp.constraints.idxsh = np.array([4])
