@@ -20,7 +20,7 @@ safety_r = rho_E + rho_H
 # Road dimensions
 ROAD_Y_MIN = -2.0
 ROAD_Y_MAX = 6.0
-TOL_ROAD = 0.3
+TOL_ROAD = 0.2
 LANE_CENTER_1 = 0.0
 LANE_CENTER_2 = 4.0
 LANE_HALF_DISTANCE = (LANE_CENTER_2 - LANE_CENTER_1) / 2
@@ -33,7 +33,7 @@ steering_rate_max = 0.087
 acc_max = 3.0
 
 # Return policy
-D_START = 15.0
+D_START = 25.0
 D_CLEAR = 5.0
 W_IN = 2.0
 W_OUT = 2.0
@@ -44,8 +44,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
 
     if weights is None:
         weights = {
-            #"lane": 3.890810431104229,
-            "lane": 3.890810431104229,
+            "lane": 2.890810431104229,
             "psi": 1.4467453645031252,
             "velocity": 56.477006267018474,
             "return": 21.6320882587589,

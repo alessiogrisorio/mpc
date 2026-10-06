@@ -10,7 +10,7 @@ from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
 
 # BRT parameters
-brt_type = "euclidean.npz"
+brt_type = "ttc.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
 ALPHA_HJ = 0.5
@@ -116,6 +116,7 @@ def run_simulation(
     simOcpCost = [] if make_plots else None
     simOcpCostComponents = [] if make_plots else None
     simReturnDiscount = np.full(Nsim, np.nan)
+    simReturnOn = np.full(Nsim, np.nan)
 
     # Simulation
     for i in range(Nsim):
@@ -130,6 +131,10 @@ def run_simulation(
         # Aggiorno posizione human
         X_H_current = X_H_initial + v_H * i * dt
         X_E, Y_E, PSI_E, V_E, DELTA_E = x_current
+        distance = X_H_current - X_E
+        gamma_R = 1.0 - (1.0 - GAMMA_MIN) * (0.5 * (1.0 + np.tanh((D_START - distance) / (2.0 * W_IN)))) * (0.5 * (1.0 + np.tanh((distance + D_CLEAR) / (2.0 * W_OUT))))
+        simReturnDiscount[i] = gamma_R
+        simReturnOn[i] = np.sqrt(gamma_R) * Y_E / 4.0
         relative_state = np.array([
             np.cos(PSI_E) * (X_H_current - X_E) + np.sin(PSI_E) * (Y_H_initial - Y_E),
             -np.sin(PSI_E) * (X_H_current - X_E) + np.cos(PSI_E) * (Y_H_initial - Y_E),
