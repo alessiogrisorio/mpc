@@ -20,7 +20,7 @@ safety_r = rho_E + rho_H
 # Road dimensions
 ROAD_Y_MIN = -2.0
 ROAD_Y_MAX = 6.0
-TOL_ROAD = 0.2
+TOL_ROAD = 0.0
 LANE_CENTER_1 = 0.0
 LANE_CENTER_2 = 4.0
 LANE_HALF_DISTANCE = (LANE_CENTER_2 - LANE_CENTER_1) / 2
@@ -37,7 +37,7 @@ D_START = 25.0
 D_CLEAR = 5.0
 W_IN = 2.0
 W_OUT = 2.0
-GAMMA_MIN = 0.05
+GAMMA_MIN = 0.0
 
 
 def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
@@ -168,10 +168,8 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
         separation_rr,
     )
     street_bounds = vertcat(
-        Y_E + 0.5 * (EGO_LENGTH * sin(PSI_E) + EGO_WIDTH * cos(PSI_E)),
-        Y_E + 0.5 * (EGO_LENGTH * sin(PSI_E) - EGO_WIDTH * cos(PSI_E)),
-        Y_E - 0.5 * (EGO_LENGTH * sin(PSI_E) + EGO_WIDTH * cos(PSI_E)),
-        Y_E - 0.5 * (EGO_LENGTH * sin(PSI_E) - EGO_WIDTH * cos(PSI_E)),
+        YC_EGO_FRONT,
+        YC_EGO_REAR,
     )
     
 
@@ -184,15 +182,15 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     model.con_h_expr_e = vertcat(separation, street_bounds)
 
     # Limiti dei vincoli collisione e HJ
-    ocp.constraints.lh = np.concatenate([np.zeros(5), np.full(4, ROAD_Y_MIN + TOL_ROAD)])
-    ocp.constraints.uh = np.concatenate([np.full(5, 1e15), np.full(4, ROAD_Y_MAX - TOL_ROAD)])
+    ocp.constraints.lh = np.concatenate([np.zeros(5), np.full(2, ROAD_Y_MIN + TOL_ROAD + rho_E)])
+    ocp.constraints.uh = np.concatenate([np.full(5, 1e15), np.full(2, ROAD_Y_MAX - TOL_ROAD - rho_E)])
 
     ocp.constraints.lh_0 = ocp.constraints.lh.copy()
     ocp.constraints.uh_0 = ocp.constraints.uh.copy()
 
     # Vincolo terminale solo su collisione
-    ocp.constraints.lh_e = np.concatenate([np.zeros(4), np.full(4, ROAD_Y_MIN + TOL_ROAD)])
-    ocp.constraints.uh_e = np.concatenate([np.full(4, 1e15), np.full(4, ROAD_Y_MAX - TOL_ROAD)])
+    ocp.constraints.lh_e = np.concatenate([np.zeros(4), np.full(2, ROAD_Y_MIN + TOL_ROAD + rho_E)])
+    ocp.constraints.uh_e = np.concatenate([np.full(4, 1e15), np.full(2, ROAD_Y_MAX - TOL_ROAD - rho_E)])
 
     # Soft constraint su HJ, indice 4
     ocp.constraints.idxsh = np.array([4])

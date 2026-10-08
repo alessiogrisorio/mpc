@@ -31,7 +31,7 @@ def run_simulation(
     lr = 1.5
 
     # MPC and simulation settings
-    Tf = 3.0
+    Tf = 5.0
     f_mpc = 50
     dt_ctrl = 1.0 / f_mpc
     N = int(round(Tf / dt_ctrl))
@@ -117,6 +117,7 @@ def run_simulation(
     simOcpCostComponents = [] if make_plots else None
     simReturnDiscount = np.full(Nsim, np.nan)
     simReturnOn = np.full(Nsim, np.nan)
+    simX_pred = np.empty((Nsim, N + 1, nx)) if make_animation else None
 
     # Simulation
     for i in range(Nsim):
@@ -186,6 +187,9 @@ def run_simulation(
                 "solver_status": status,
             }
 
+        # Predicted MPC trajectory
+        if simX_pred is not None: simX_pred[i] = np.asarray(acados_solver.get_flat("x"), dtype=float).reshape(N + 1, nx)
+
         # First optimal input
         u0 = acados_solver.get(0, "u")
         simU[i, :] = u0
@@ -250,6 +254,7 @@ def run_simulation(
             Y_H_initial,
             v_H,
             save=True,
+            simX_pred=simX_pred,
         )
     if make_plots or make_animation:
         print(f"\nMean OCP solve time: {1e3 * solve_time.mean():.3f} ms")
@@ -265,6 +270,7 @@ def run_simulation(
         "success": True,
         "simX": simX,
         "simU": simU,
+        "simX_pred": simX_pred,
         "simV": simV,
         "simGradV": simGradV,
         "simInsideGrid": simInsideGrid,

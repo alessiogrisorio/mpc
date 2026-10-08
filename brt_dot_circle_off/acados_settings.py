@@ -164,8 +164,8 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     model.con_h_expr_e = street_bounds
 
     # Limiti dei vincoli collisione e HJ
-    ocp.constraints.lh = np.array([0.0, ROAD_Y_MIN + TOL_ROAD + rho_E])
-    ocp.constraints.uh = np.array([1e15, ROAD_Y_MIN - TOL_ROAD - rho_E])
+    ocp.constraints.lh = np.array([0.0, ROAD_Y_MIN + TOL_ROAD + rho_E, ROAD_Y_MIN + TOL_ROAD + rho_E])
+    ocp.constraints.uh = np.array([1e15, ROAD_Y_MAX - TOL_ROAD - rho_E, ROAD_Y_MAX - TOL_ROAD - rho_E])
 
     ocp.constraints.lh_0 = ocp.constraints.lh.copy()
     ocp.constraints.uh_0 = ocp.constraints.uh.copy()

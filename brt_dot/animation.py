@@ -504,6 +504,7 @@ def animate_simulation(
     save=False,
     filename="simulation.mp4",
     dpi=100,
+    simX_pred=None,
 ):
 
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -651,6 +652,25 @@ def animate_simulation(
         linewidth=1.5,
         label="Trajectory",
     )
+    # Predicted MPC trajectory
+    predicted_trajectory, = ax.plot(
+        [],
+        [],
+        color="tab:green",
+        linestyle="--",
+        linewidth=2.0,
+        label="MPC prediction",
+    )
+
+    predicted_terminal, = ax.plot(
+        [],
+        [],
+        color="tab:green",
+        marker="D",
+        linestyle="None",
+        markersize=6,
+        label="Prediction horizon",
+    )
 
     # Vehicle centers
     ego_center, = ax.plot(
@@ -786,11 +806,37 @@ def animate_simulation(
             simX[:i + 1, 0],
             simX[:i + 1, 1],
         )
+        
+        # Predicted MPC trajectory
+        if simX_pred is not None and i < len(simX_pred):
+
+            prediction = simX_pred[i]
+
+            predicted_trajectory.set_data(
+                prediction[:, 0],
+                prediction[:, 1],
+            )
+
+            predicted_terminal.set_data(
+                [prediction[-1, 0]],
+                [prediction[-1, 1]],
+            )
+
+        else:
+            predicted_trajectory.set_data([], [])
+            predicted_terminal.set_data([], [])
 
         # Camera
+        x_min = min(X_E, X_H)
+        x_max = max(X_E, X_H)
+
+        if simX_pred is not None and i < len(simX_pred):
+            x_min = min(x_min, np.min(simX_pred[i, :, 0]))
+            x_max = max(x_max, np.max(simX_pred[i, :, 0]))
+
         ax.set_xlim(
-            min(X_E, X_H) - 12.0,
-            max(X_E, X_H) + 20.0,
+            x_min - 12.0,
+            x_max + 12.0,
         )
 
         # Minimum distance between double circles
@@ -839,6 +885,8 @@ def animate_simulation(
             human_front_circle,
             human_rear_circle,
             trajectory,
+            predicted_trajectory,
+            predicted_terminal,
             ego_center,
             human_center,
             heading,
@@ -848,7 +896,7 @@ def animate_simulation(
 
     update(0)
 
-    frame_step = 2
+    frame_step = 1
     frames = range(0, len(t), frame_step)
     animation = FuncAnimation(
         fig,
