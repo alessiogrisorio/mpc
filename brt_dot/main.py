@@ -10,7 +10,7 @@ from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
 
 # BRT parameters
-brt_type = "ttc.npz"
+brt_type = "euclidean.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
 ALPHA_HJ = 0.5
