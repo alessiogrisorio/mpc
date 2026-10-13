@@ -28,7 +28,7 @@ LANE_CENTER_1 = 0.0
 LANE_CENTER_2 = 4.0
 LANE_HALF_DISTANCE = (LANE_CENTER_2 - LANE_CENTER_1) / 2
 left_clearance_ref = ROAD_MAX - LANE_CENTER_1 - EGO_WIDTH / 2.0
-right_clearance_ref = LANE_CENTER_2 - EGO_WIDTH / 2.0 - ROAD_MIN
+right_clearance_ref = LANE_CENTER_1 - EGO_WIDTH / 2.0 - ROAD_MIN
 k_balance = left_clearance_ref / right_clearance_ref
 EDGE_MARGIN = 0.3
 
@@ -128,13 +128,15 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
         separation_rr,
     )
     street_bounds = vertcat(
-        YC_EGO_FRONT,
-        YC_EGO_REAR,
+        Y_E + 0.5 * (EGO_LENGTH * sin(PSI_E) + EGO_WIDTH * cos(PSI_E)),
+        Y_E + 0.5 * (EGO_LENGTH * sin(PSI_E) - EGO_WIDTH * cos(PSI_E)),
+        Y_E - 0.5 * (EGO_LENGTH * sin(PSI_E) + EGO_WIDTH * cos(PSI_E)),
+        Y_E - 0.5 * (EGO_LENGTH * sin(PSI_E) - EGO_WIDTH * cos(PSI_E)),
     )
     
     # Soft road penalty
     lateral_extent = EGO_LENGTH / 2.0 * sqrt(sin(PSI_E)**2 + eps**2) + EGO_WIDTH / 2.0 * sqrt(cos(PSI_E)**2 + eps**2)
-    C_left = exp(-K_LANE * (Y_E + lateral_extent - ROAD_MAX))
+    C_left = exp(K_LANE * (Y_E + lateral_extent - ROAD_MAX))
     C_right = exp(-K_LANE * k_balance * (Y_E - lateral_extent - ROAD_MIN))
 
     # Low speed penalty
@@ -242,7 +244,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
 
     # Limiti dei vincoli collisione e HJ
     ocp.constraints.lh = np.concatenate([np.array([0.0]), np.full(4, ROAD_MIN)])
-    ocp.constraints.uh = np.concatenate([np.full([1e15]), np.full(4, ROAD_MAX)])
+    ocp.constraints.uh = np.concatenate([np.array([1e15]), np.full(4, ROAD_MAX)])
 
     ocp.constraints.lh_0 = ocp.constraints.lh.copy()
     ocp.constraints.uh_0 = ocp.constraints.uh.copy()
