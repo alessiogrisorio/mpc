@@ -3,8 +3,8 @@ import time
 import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
-from acados_settings import acados_settings, EGO_LENGTH, HUMAN_LENGTH, safety_r, D_START, D_CLEAR, W_IN, W_OUT, GAMMA_MIN
-from animation import animate_simulation, plot_results, initialize_ocp_cost_diagnostics, compute_ocp_cost_diagnostics, plot_ocp_diagnostics, plot_return_discount
+from acados_settings import acados_settings, LANE_CENTER_1
+from animation import animate_simulation, plot_results
 from pathlib import Path
 from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
@@ -59,9 +59,6 @@ def run_simulation(
     )
     nx = model.x.rows()     # 5
     nu = model.u.rows()     # 2
-    cost_diagnostic = None
-    if make_plots:
-        cost_diagnostic = initialize_ocp_cost_diagnostics(acados_solver, N)
 
     # Vehicle simulator
     sim = AcadosSim()
@@ -113,10 +110,7 @@ def run_simulation(
     simHJResidual = np.full(Nsim, np.nan)
     simHJSlack = np.zeros(Nsim)
     simHJSlackUpper = np.zeros(Nsim)
-    simOcpCost = [] if make_plots else None
-    simOcpCostComponents = [] if make_plots else None
-    simReturnDiscount = np.full(Nsim, np.nan)
-    simReturnOn = np.full(Nsim, np.nan)
+    simOcpCost = np.full(Nsim, np.nan) if make_plots else None
     simX_pred = np.empty((Nsim, N + 1, nx)) if make_animation else None
 
     # Simulation
@@ -132,10 +126,6 @@ def run_simulation(
         # Aggiorno posizione human
         X_H_current = X_H_initial + v_H * i * dt
         X_E, Y_E, PSI_E, V_E, DELTA_E = x_current
-        distance = X_H_current - X_E
-        gamma_R = 1.0 - (1.0 - GAMMA_MIN) * (0.5 * (1.0 + np.tanh((D_START - distance) / (2.0 * W_IN)))) * (0.5 * (1.0 + np.tanh((distance + D_CLEAR) / (2.0 * W_OUT))))
-        simReturnDiscount[i] = gamma_R
-        simReturnOn[i] = np.sqrt(gamma_R) * Y_E / 4.0
         relative_state = np.array([
             np.cos(PSI_E) * (X_H_current - X_E) + np.sin(PSI_E) * (Y_H_initial - Y_E),
             -np.sin(PSI_E) * (X_H_current - X_E) + np.cos(PSI_E) * (Y_H_initial - Y_E),
@@ -164,11 +154,42 @@ def run_simulation(
             else:
                 hj_parameters = [0.0, 0.0, 1.0]
             parameters = np.array([
-                X_H_current + v_H * j * dt_ocp,
+                human_prediction[j],
                 Y_H_initial,
                 *hj_parameters,
             ])
             acados_solver.set(j, "p", parameters)
+            if j < N:
+                X_ref = X_E + v_ref * j * dt_ocp
+                yref = np.array([
+                    X_ref,
+                    LANE_CENTER_1,
+                    0.0,
+                    v_ref,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ])
+                acados_solver.cost_set(j, "yref", yref)
+
+        # Terminal reference
+        X_ref_e = X_E + v_ref * Tf
+        yref_e = np.array([
+            X_ref_e,
+            LANE_CENTER_1,
+            0.0,
+            v_ref,
+            0.0,
+        ])
+        acados_solver.cost_set(N, "yref", yref_e)
 
         # Solve ocp
         start = time.perf_counter()
@@ -200,9 +221,7 @@ def run_simulation(
         simHJSlack[i] = sl[0] if len(sl) > 0 else 0.0
         simHJSlackUpper[i] = su[0] if len(su) > 0 else 0.0
         if make_plots:
-            total_cost, components = compute_ocp_cost_diagnostics(acados_solver, cost_diagnostic, human_prediction)
-            simOcpCost.append(total_cost)
-            simOcpCostComponents.append(components)
+            simOcpCost[i] = acados_solver.get_cost()
 
         # Ego simulator
         acados_integrator.set("x", x_current)
@@ -223,9 +242,6 @@ def run_simulation(
  
     ################################  
     if make_plots:
-        simOcpCost = np.asarray(simOcpCost)
-        simOcpCostComponents = np.asarray(simOcpCostComponents)
-        simHJSlackActive = simHJActive & (np.maximum(simHJSlack, simHJSlackUpper) > 1e-6)
         plot_results(
             dt,
             simX,
@@ -233,17 +249,23 @@ def run_simulation(
             v_ref,
             v_H,
             simV,
-            simHJSlackActive,
+            simHJActive,
         )
-        plot_return_discount(dt, simReturnDiscount)
-        plot_ocp_diagnostics(
-            dt,
+        fig, ax = plt.subplots(
+            figsize=(10,4),
+            layout="constrained",
+        )
+        t_cost = np.arange(Nsim) * dt
+        ax.plot(
+            t_cost,
             simOcpCost,
-            simOcpCostComponents,
-            simHJSlack,
-            simHJSlackUpper,
-            simHJSlackActive,
+            label="Total OCP cost",
         )
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("Cost")
+        ax.set_title("Optimal MPC cost")
+        ax.grid(True)
+        ax.legend()
     animation = None
     if make_animation:
         t_x = np.arange(len(simX)) * dt
@@ -275,12 +297,10 @@ def run_simulation(
         "simGradV": simGradV,
         "simInsideGrid": simInsideGrid,
         "simHJActive": simHJActive,
-        "simReturnDiscount": simReturnDiscount,
         "simHJResidual": simHJResidual,
         "simHJSlack": simHJSlack,
         "simHJSlackUpper": simHJSlackUpper,
         "simOcpCost": simOcpCost,
-        "simOcpCostComponents": simOcpCostComponents,
         "solve_time": solve_time,
         "dt": dt,
         "v_ref": v_ref,

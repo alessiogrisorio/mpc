@@ -17,11 +17,6 @@ from acados_settings import (
     LANE_CENTER_1,
     LANE_CENTER_2,
     LANE_HALF_DISTANCE,
-    D_START,
-    D_CLEAR,
-    W_IN,
-    W_OUT,
-    GAMMA_MIN,
     EDGE_MARGIN,
 )
 
