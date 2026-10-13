@@ -17,7 +17,7 @@ from acados_settings import (
 WEIGHT_BOUNDS = {
     "x": (1.0, 100.0),
     "y": (0.1, 10.0),
-    "velocity": (0.1, 100.0),
+    "velocity": (2.0, 100.0),
     "low_speed": (0.05, 3.0),
     "collision": (0.01, 1.0),
     "overtake": (0.1, 10.0),
@@ -423,6 +423,7 @@ def score_components(result, scenario):
         pass_candidates.size > 0
         and lead_margin[-1] >= 0.0
         and collision_depth <= 1e-3
+        and brt_margin_cost == 0.0
         and brt_unsafe_cost == 0.0
         and unknown_fraction <= 0.05
     )

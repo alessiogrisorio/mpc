@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 brt_type = "euclidean.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
-ALPHA_HJ = 0.3
+ALPHA_HJ = 0.5
 HJ_STAGES = 3
 
 def run_simulation(
