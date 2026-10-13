@@ -1,0 +1,154 @@
+{
+    "project": "mpc_overtake",
+    "best_value": 31.261316404654497,
+    "baseline_weights": {
+        "x": 10.0,
+        "y": 0.6,
+        "psi": 0.3,
+        "velocity": 0.5,
+        "steering_rate": 0.03,
+        "acceleration": 0.5,
+        "road_left": 1.0,
+        "road_right": 1.0,
+        "low_speed": 0.5,
+        "collision": 0.05,
+        "overtake": 2.0
+    },
+    "best_weights": {
+        "x": 12.795671099140785,
+        "y": 0.187004955386393,
+        "psi": 0.3,
+        "velocity": 7.39806242695111,
+        "steering_rate": 0.03,
+        "acceleration": 0.5,
+        "road_left": 1.0,
+        "road_right": 1.0,
+        "low_speed": 0.6997050192410854,
+        "collision": 0.4897221717605145,
+        "overtake": 9.334625302202161
+    },
+    "baseline": {
+        "train": {
+            "scores": [
+                136.31089799414846,
+                130.15721039533545,
+                137.32452408522937,
+                131.01328654573035,
+                129.78248589421327,
+                -110.15663807260634
+            ],
+            "mean": 92.40529447367508,
+            "worst": 137.32452408522937,
+            "std": 90.6362826285702,
+            "aggregate": 117.23054427084918,
+            "failures": 0,
+            "failure_details": [],
+            "components": {
+                "velocity": 1.323903665416853,
+                "control_effort": 0.009814524438252273,
+                "smoothness": 7.635820523361758e-05,
+                "lane_return": 0.4195404651368076,
+                "hj_slack": 1.9350215948842955e-06,
+                "edge": 0.0,
+                "brt_margin": 0.0,
+                "brt_unsafe": 0.0,
+                "brt_unknown": 0.0,
+                "collision": 0.0,
+                "overtake": 90.65195752545635,
+                "overtake_completed": 0.16666666666666666,
+                "failure_penalty": NaN
+            }
+        },
+        "validation": {
+            "scores": [
+                -109.46917897055593,
+                133.3430319061131,
+                -107.74414300742116,
+                126.78138217866069
+            ],
+            "mean": 10.727773026699179,
+            "worst": 133.3430319061131,
+            "std": 119.35853977144666,
+            "aggregate": 59.28536871226966,
+            "failures": 0,
+            "failure_details": [],
+            "components": {
+                "velocity": 1.0104020413818946,
+                "control_effort": 0.018743256673931688,
+                "smoothness": 0.0003760699921097901,
+                "lane_return": 0.16956778331576114,
+                "hj_slack": 3.497558097911279e-06,
+                "edge": 0.0,
+                "brt_margin": 0.0,
+                "brt_unsafe": 0.0,
+                "brt_unknown": 0.0,
+                "collision": 0.0,
+                "overtake": 9.528680377777384,
+                "overtake_completed": 0.5,
+                "failure_penalty": NaN
+            }
+        }
+    },
+    "best": {
+        "train": {
+            "scores": [
+                136.40790936103505,
+                -108.62953806554559,
+                137.5408518019069,
+                -108.54044714405848,
+                -109.76588498317747,
+                -111.497809572012
+            ],
+            "mean": -27.414153100308596,
+            "worst": 137.5408518019069,
+            "std": 116.24478852939478,
+            "aggregate": 31.261316404654497,
+            "failures": 0,
+            "failure_details": [],
+            "components": {
+                "velocity": 0.7481737865292152,
+                "control_effort": 0.024880253474297658,
+                "smoothness": 0.00025945911770914633,
+                "lane_return": 0.1904809584198138,
+                "hj_slack": 4.449993471645319e-06,
+                "edge": 0.7803730701394995,
+                "brt_margin": 0.0,
+                "brt_unsafe": 0.0,
+                "brt_unknown": 0.0,
+                "collision": 0.0,
+                "overtake": -29.158325077982607,
+                "overtake_completed": 0.6666666666666666,
+                "failure_penalty": NaN
+            }
+        },
+        "validation": {
+            "scores": [
+                -110.22059932453945,
+                133.71375037626186,
+                -107.21041603980055,
+                127.06767572859961
+            ],
+            "mean": 10.837602685130367,
+            "worst": 133.71375037626186,
+            "std": 119.58093551001203,
+            "aggregate": 59.493779934415045,
+            "failures": 0,
+            "failure_details": [],
+            "components": {
+                "velocity": 0.9540032497872478,
+                "control_effort": 0.02158853968140027,
+                "smoothness": 0.0006949856277919172,
+                "lane_return": 0.3293633923615039,
+                "hj_slack": 3.061073623167638e-06,
+                "edge": 0.35362176456961314,
+                "brt_margin": 0.0,
+                "brt_unsafe": 0.0,
+                "brt_unknown": 0.0,
+                "collision": 0.0,
+                "overtake": 9.178327692029185,
+                "overtake_completed": 0.5,
+                "failure_penalty": NaN
+            }
+        }
+    }
+}

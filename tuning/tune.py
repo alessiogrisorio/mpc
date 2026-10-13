@@ -130,7 +130,13 @@ def evaluate_weights(
         "smoothness",
         "lane_return",
         "hj_slack",
-        "overtake_penalty",
+        "edge",
+        "brt_margin",
+        "brt_unsafe",
+        "brt_unknown",
+        "collision",
+        "overtake",
+        "overtake_completed",
         "failure_penalty",
     ]
 
@@ -298,7 +304,7 @@ def main():
 
     def objective(trial):
 
-        weights = {}
+        weights = config.BASELINE_WEIGHTS.copy()
 
         for name, bounds in config.WEIGHT_BOUNDS.items():
 
@@ -327,7 +333,7 @@ def main():
     results_dir = ROOT / "tuning" / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    study_name = f"{args.project}_parabolic_return_v1"
+    study_name = f"{args.project}_safe_overtake_v3"
     study_path = results_dir / f"{study_name}.db"
 
     study = optuna.create_study(
@@ -343,7 +349,10 @@ def main():
         n_trials=args.trials,
     )
 
-    best_weights = study.best_params
+    best_weights = {
+        **config.BASELINE_WEIGHTS,
+        **study.best_params,
+    }
 
     print("\n")
     print("=" * 50)

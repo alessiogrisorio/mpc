@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 brt_type = "euclidean.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
-ALPHA_HJ = 0.5
+ALPHA_HJ = 0.3
 HJ_STAGES = 3
 
 def run_simulation(
@@ -31,7 +31,7 @@ def run_simulation(
     lr = 1.5
 
     # MPC and simulation settings
-    Tf = 5.0
+    Tf = 3.0
     f_mpc = 50
     dt_ctrl = 1.0 / f_mpc
     N = int(round(Tf / dt_ctrl))
@@ -45,7 +45,7 @@ def run_simulation(
 
     # Ego: [X, Y, psi, v, delta]
     v_ref = scenario.get("v_ref", 8.0)
-    x0 = np.array(scenario.get("x0", [0.0, 0.0, 0.0, 5.0, 0.0]), dtype=float)
+    x0 = np.array(scenario.get("x0", [0.0, 0.0, 0.0, 8.0, 0.0]), dtype=float)
 
     # Human
     X_H_initial = scenario.get("X_H_initial", 20.0)
