@@ -54,7 +54,7 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
             "velocity": 5.381717125532571,
             "steering_rate": 0.03,
             "acceleration": 0.5,
-            "road_left": 1.0,
+            "road_left": 5.0,
             "road_right": 1.0,
             "low_speed": 1.552188169245673,
             "collision": 0.8477440224934341,

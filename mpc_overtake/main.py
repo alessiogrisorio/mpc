@@ -4,13 +4,13 @@ import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
 from acados_settings import acados_settings, LANE_CENTER_1
-from animation import animate_simulation, plot_results
+from animation import animate_simulation, plot_results, OcpCostDiagnostics, hj_prediction_diagnostics, COST_GROUPS
 from pathlib import Path
 from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
 
 # BRT parameters
-brt_type = "euclidean.npz"
+brt_type = "dce.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
 ALPHA_HJ = 0.8
@@ -59,6 +59,7 @@ def run_simulation(
     )
     nx = model.x.rows()     # 5
     nu = model.u.rows()     # 2
+    cost_diagnostic = OcpCostDiagnostics(model, acados_solver, N, dt_ocp) if make_plots else None
 
     # Vehicle simulator
     sim = AcadosSim()
@@ -110,7 +111,10 @@ def run_simulation(
     simHJResidual = np.full(Nsim, np.nan)
     simHJSlack = np.zeros(Nsim)
     simHJSlackUpper = np.zeros(Nsim)
-    simOcpCost = np.full(Nsim, np.nan) if make_plots else None
+    simOcpCost = np.full(Nsim, np.nan) if make_plots or make_animation else None
+    simCostComponents = {name: np.full(Nsim, np.nan) for name in COST_GROUPS} if make_animation else None
+    simHJMinResidual = np.full(Nsim, np.nan) if make_animation else None
+    simHJMaxSlack = np.full(Nsim, np.nan) if make_animation else None
     simX_pred = np.empty((Nsim, N + 1, nx)) if make_animation else None
 
     # Simulation
@@ -220,8 +224,16 @@ def run_simulation(
         su = acados_solver.get(0, "su")
         simHJSlack[i] = sl[0] if len(sl) > 0 else 0.0
         simHJSlackUpper[i] = su[0] if len(su) > 0 else 0.0
-        if make_plots:
-            simOcpCost[i] = acados_solver.get_cost()
+        if make_animation and hj_active:
+            simHJMinResidual[i], simHJMaxSlack[i] = hj_prediction_diagnostics(acados_solver, M_HJ, b_HJ, HJ_STAGES)
+        if simOcpCost is not None:
+            if cost_diagnostic is not None:
+                total_cost, components = cost_diagnostic.evaluate(acados_solver)
+                simOcpCost[i] = total_cost
+                for name, value in components.items():
+                    simCostComponents[name][i] = value
+            else:
+                simCostComponents[i] = acados_solver.get_cost()
 
         # Ego simulator
         acados_integrator.set("x", x_current)
@@ -239,8 +251,26 @@ def run_simulation(
             }
         
         simX[i + 1, :] = acados_integrator.get("x")
- 
-    ################################  
+
+
+
+
+
+
+    ################################ 
+    # 
+    # 
+    # 
+    if simCostComponents is not None:
+        reconstructed_cost = sum(simCostComponents.values())
+        max_cost_error = np.max(np.abs(simOcpCost - reconstructed_cost))
+        print(
+            f"Maximum cost decomposition error: "
+            f"{max_cost_error:.6e}"
+        )
+    # 
+    # 
+    #  
     if make_plots:
         plot_results(
             dt,
@@ -277,6 +307,18 @@ def run_simulation(
             v_H,
             save=True,
             simX_pred=simX_pred,
+            simU=simU,
+            v_ref=v_ref,
+            simV=simV,
+            simHJActive=simHJActive,
+            simHJResidual=simHJResidual,
+            simHJSlack=simHJSlack,
+            simHJSlackUpper=simHJSlackUpper,
+            simHJMinResidual=simHJMinResidual,
+            simHJMaxSlack=simHJMaxSlack,
+            simOcpCost=simOcpCost,
+            simCostComponents=simCostComponents,
+            brt=brt,
         )
     if make_plots or make_animation:
         print(f"\nMean OCP solve time: {1e3 * solve_time.mean():.3f} ms")
@@ -285,7 +327,7 @@ def run_simulation(
             f"Stati dentro la griglia BRT: "
             f"{simInsideGrid.sum()}/{Nsim}"
         )
-        plt.show()
+        plt.close("all")
     ################################
 
     return {
@@ -311,4 +353,7 @@ def run_simulation(
     }
 
 if __name__ == "__main__":
-    run_simulation()
+    run_simulation(
+        make_plots=False,
+        make_animation=True,
+    )
