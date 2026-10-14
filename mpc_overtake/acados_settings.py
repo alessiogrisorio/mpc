@@ -48,17 +48,17 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
 
     if weights is None:
         weights = {
-            "x": 12.795671099140785,
-            "y": 0.187004955386393,
+            "x": 10.336312375113092,
+            "y": 0.1533015146581476,
             "psi": 0.3,
-            "velocity": 7.39806242695111,
+            "velocity": 5.381717125532571,
             "steering_rate": 0.03,
             "acceleration": 0.5,
             "road_left": 1.0,
             "road_right": 1.0,
-            "low_speed": 0.6997050192410854,
-            "collision": 0.4897221717605145,
-            "overtake": 9.334625302202161
+            "low_speed": 1.552188169245673,
+            "collision": 0.8477440224934341,
+            "overtake": 8.165739200864866
         }
 
     # Create ocp and model
