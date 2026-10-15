@@ -10,7 +10,7 @@ from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
 
 # BRT parameters
-brt_type = "dce.npz"
+brt_type = "sff.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
 ALPHA_HJ = 0.8
@@ -59,7 +59,7 @@ def run_simulation(
     )
     nx = model.x.rows()     # 5
     nu = model.u.rows()     # 2
-    cost_diagnostic = OcpCostDiagnostics(model, acados_solver, N, dt_ocp) if make_plots else None
+    cost_diagnostic = OcpCostDiagnostics(model, acados_solver, N, dt_ocp) if make_animation else None
 
     # Vehicle simulator
     sim = AcadosSim()
@@ -233,7 +233,7 @@ def run_simulation(
                 for name, value in components.items():
                     simCostComponents[name][i] = value
             else:
-                simCostComponents[i] = acados_solver.get_cost()
+                simOcpCost[i] = acados_solver.get_cost()
 
         # Ego simulator
         acados_integrator.set("x", x_current)
