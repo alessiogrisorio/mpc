@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 import numpy as np
 
@@ -7,6 +8,7 @@ from acados_settings import acados_settings, LANE_CENTER_1
 from animation import animate_simulation, plot_results, OcpCostDiagnostics, hj_prediction_diagnostics, COST_GROUPS
 from pathlib import Path
 from brt_utils import BRTinterpolator, hj_coefficients
+from hj_diagnostics import HJDiagnostics
 import matplotlib.pyplot as plt
 
 # BRT parameters
@@ -118,6 +120,15 @@ def run_simulation(
     simHJMaxSlack = np.full(Nsim, np.nan) if make_animation else None
     simX_pred = np.empty((Nsim, N + 1, nx)) if make_animation else None
 
+    hj_diagnostics = HJDiagnostics(
+        metrics=METRICS,
+        dt=dt,
+        stages=HJ_STAGES,
+        stage_dt=dt_ocp,
+        u_lower=(-0.087, -7.0),
+        u_upper=(0.087, 2.5),
+    )
+
     # Simulation
     for i in range(Nsim):
 
@@ -227,6 +238,17 @@ def run_simulation(
         simHJResidual[i, active] = residual[active]
         simHJSlack[i] = np.asarray(acados_solver.get(0, "sl"), dtype=float).ravel()
         simHJSlackUpper[i] = np.asarray(acados_solver.get(0, "su"), dtype=float).ravel()
+        hj_diagnostics.record_solver(
+            acados_solver,
+            V=simV[i],
+            alpha=ALPHA_HJ,
+            available=simHJActive[i],
+            state=x_current,
+            relative_state=relative_state,
+            time=i * dt,
+            solver_status=status,
+            solve_time=solve_time[i],
+        )
         if simOcpCost is not None:
             if cost_diagnostic is not None:
                 total_cost, components = cost_diagnostic.evaluate(acados_solver)
@@ -272,6 +294,58 @@ def run_simulation(
     # 
     # 
     #  
+    diagnostics_data = hj_diagnostics.arrays()
+    contributions = hj_diagnostics.contributions()
+
+    residual_matches = np.allclose(
+        contributions["residual"][:, 0, :],
+        simHJResidual,
+        rtol=1e-8,
+        atol=1e-10,
+        equal_nan=True,
+    )
+
+    print(f"Residui HJ registrati correttamente: {residual_matches}")
+
+    if not residual_matches:
+        raise RuntimeError("Residui diagnostici diversi da quelli del main")
+
+    for k, metric in enumerate(METRICS):
+        active = diagnostics_data["active"][:, :, k]
+        violations = contributions["soft_violated"][:, :, k]
+
+        print(
+            f"{metric}: "
+            f"{np.count_nonzero(active)} condizioni attive, "
+            f"{np.count_nonzero(violations)} violazioni oltre tolleranza"
+        )
+
+
+    run_name = (
+        datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        + "_"
+        + "_".join(METRICS)
+    )
+
+    results_directory = Path(__file__).resolve().parent / "results"
+
+    diagnostics_path = hj_diagnostics.save(
+        results_directory / f"{run_name}_hj.npz"
+    )
+
+    np.savez_compressed(
+        results_directory / f"{run_name}_simulation.npz",
+        simX=simX,
+        simU=simU,
+        dt=dt,
+        v_ref=v_ref,
+        X_H_initial=X_H_initial,
+        Y_H_initial=Y_H_initial,
+        v_H=v_H,
+    )
+
+    print(f"Diagnostica salvata in: {diagnostics_path}")
+
     if make_plots:
         plot_results(
             dt,
@@ -352,6 +426,8 @@ def run_simulation(
         "Y_H_initial": Y_H_initial,
         "scenario": scenario,
         "metrics": METRICS.copy(),
+        "hj_diagnostic": hj_diagnostics,
+        "diagnostics_path": diagnostics_path,
     }
 
 
