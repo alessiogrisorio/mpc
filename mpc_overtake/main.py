@@ -10,10 +10,10 @@ from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
 
 # BRT parameters
-brt_type = "sff.npz"
+brt_type = "eggert.npz"
 brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
 brt = BRTinterpolator(brt_path)
-ALPHA_HJ = 0.8
+ALPHA_HJ = 1.5
 HJ_STAGES = 3
 
 def run_simulation(
@@ -48,7 +48,7 @@ def run_simulation(
     x0 = np.array(scenario.get("x0", [0.0, 0.0, 0.0, 8.0, 0.0]), dtype=float)
 
     # Human
-    X_H_initial = scenario.get("X_H_initial", 20.0)
+    X_H_initial = scenario.get("X_H_initial", 50.0)
     Y_H_initial = scenario.get("Y_H_initial", 0.0)
     v_H = scenario.get("v_H", 2.0)
     human_pos = np.array([X_H_initial, Y_H_initial])
