@@ -10,11 +10,13 @@ from brt_utils import BRTinterpolator, hj_coefficients
 import matplotlib.pyplot as plt
 
 # BRT parameters
-brt_type = "eggert.npz"
-brt_path = Path(__file__).resolve().parents[1] / "brt" / brt_type
-brt = BRTinterpolator(brt_path)
+METRICS = ["euclidean", "dce", "ttc", "eggert"]
 ALPHA_HJ = 1.5
 HJ_STAGES = 3
+brt_dir = Path(__file__).resolve().parents[1] / "brt"
+brts = [BRTinterpolator(brt_dir / f"{metric}.npz") for metric in METRICS]
+N_METRICS = len(METRICS)
+
 
 def run_simulation(
     weights=None,
@@ -55,7 +57,7 @@ def run_simulation(
 
     # MPC solver
     model, acados_solver = acados_settings(
-        Tf, N, lf, lr, x0, v_ref, human_pos, weights=weights
+        Tf, N, lf, lr, x0, v_ref, human_pos, weights=weights, n_metrics=N_METRICS,
     )
     nx = model.x.rows()     # 5
     nu = model.u.rows()     # 2
@@ -104,13 +106,15 @@ def run_simulation(
     simU = np.zeros((Nsim, nu))         # 500 x 2
     solve_time = np.zeros(Nsim)         # 500 x 1
     simX[0, :] = x0
-    simV = np.full(Nsim, np.nan)                # 500 x 1
-    simGradV = np.full((Nsim, 6), np.nan)       # 500 x 6
-    simInsideGrid = np.zeros(Nsim, dtype=bool)  # 500 x 1
-    simHJActive = np.zeros(Nsim, dtype=bool)        # 500 x 1
-    simHJResidual = np.full(Nsim, np.nan)
-    simHJSlack = np.zeros(Nsim)
-    simHJSlackUpper = np.zeros(Nsim)
+    simV = np.full((Nsim, N_METRICS), np.nan)
+    simGradV = np.full((Nsim, N_METRICS, 6), np.nan)
+
+    simInsideGrid = np.zeros((Nsim, N_METRICS), dtype=bool)
+    simHJActive = np.zeros((Nsim, N_METRICS), dtype=bool)
+
+    simHJResidual = np.full((Nsim, N_METRICS), np.nan)
+    simHJSlack = np.zeros((Nsim, N_METRICS))
+    simHJSlackUpper = np.zeros((Nsim, N_METRICS))
     simOcpCost = np.full(Nsim, np.nan) if make_plots or make_animation else None
     simCostComponents = {name: np.full(Nsim, np.nan) for name in COST_GROUPS} if make_animation else None
     simHJMinResidual = np.full(Nsim, np.nan) if make_animation else None
@@ -140,27 +144,29 @@ def run_simulation(
         ])
 
         # Valutazione BRT
-        simV[i], simGradV[i], simInsideGrid[i] = brt.evaluate(relative_state)
-        hj_active = simInsideGrid[i]
-        simHJActive[i] = hj_active
-        if hj_active:
-            M_HJ, b_HJ = hj_coefficients(relative_state, simGradV[i], brt.dynamics_parameters)
-            b_HJ += ALPHA_HJ * simV[i]
-        else:
-            M_HJ = np.zeros(2)
-            b_HJ = 1.0
+        M_HJ = np.zeros((N_METRICS, 2))
+        b_HJ = np.ones(N_METRICS)
+        for k, brt in enumerate(brts):
+            value, gradient, inside = brt.evaluate(relative_state)
+            simV[i, k] = value
+            simGradV[i, k] = gradient
+            simInsideGrid[i, k] = inside
+            if inside:
+                M_HJ[k], b_HJ[k] = hj_coefficients(relative_state, gradient, brt.dynamics_parameters)
+                b_HJ[k] += ALPHA_HJ * value
+        hj_parameters_active = np.column_stack([M_HJ, b_HJ]).ravel()
+        hj_parameters_inactive = np.tile([0.0, 0.0, 1.0], N_METRICS)
 
         # Human prediction over MPC horizon
         human_prediction = X_H_current + v_H * np.arange(N + 1) * dt_ocp
         for j in range(N + 1):
-            if hj_active and j < HJ_STAGES:
-                hj_parameters = [M_HJ[0], M_HJ[1], b_HJ]
+            if j < HJ_STAGES:
+                hj_parameters = hj_parameters_active
             else:
-                hj_parameters = [0.0, 0.0, 1.0]
-            parameters = np.array([
-                human_prediction[j],
-                Y_H_initial,
-                *hj_parameters,
+                hj_parameters = hj_parameters_inactive
+            parameters = np.concatenate([
+                [human_prediction[j], Y_H_initial],
+                hj_parameters,
             ])
             acados_solver.set(j, "p", parameters)
             if j < N:
@@ -218,14 +224,11 @@ def run_simulation(
         # First optimal input
         u0 = acados_solver.get(0, "u")
         simU[i, :] = u0
-        if hj_active:
-            simHJResidual[i] = M_HJ @ u0 + b_HJ
-        sl = acados_solver.get(0, "sl")
-        su = acados_solver.get(0, "su")
-        simHJSlack[i] = sl[0] if len(sl) > 0 else 0.0
-        simHJSlackUpper[i] = su[0] if len(su) > 0 else 0.0
-        if make_animation and hj_active:
-            simHJMinResidual[i], simHJMaxSlack[i] = hj_prediction_diagnostics(acados_solver, M_HJ, b_HJ, HJ_STAGES)
+        active = simHJActive[i]
+        residual = M_HJ @ u0 + b_HJ
+        simHJResidual[i, active] = residual[active]
+        simHJSlack[i] = np.asarray(acados_solver.get(0, "sl"), dtype=float).ravel()
+        simHJSlackUpper[i] = np.asarray(acados_solver.get(0, "su"), dtype=float).ravel()
         if simOcpCost is not None:
             if cost_diagnostic is not None:
                 total_cost, components = cost_diagnostic.evaluate(acados_solver)
@@ -350,10 +353,66 @@ def run_simulation(
         "X_H_initial": X_H_initial,
         "Y_H_initial": Y_H_initial,
         "scenario": scenario,
+        "metrics": METRICS.copy(),
     }
 
-if __name__ == "__main__":
+#if __name__ == "__main__":
     run_simulation(
         make_plots=False,
         make_animation=True,
     )
+
+if __name__ == "__main__":
+    result = run_simulation(
+        make_plots=False,
+        make_animation=False,
+    )
+
+    t_x = np.arange(len(result["simX"])) * result["dt"]
+    t_u = np.arange(len(result["simU"])) * result["dt"]
+
+    fig, axes = plt.subplots(
+        4, 1,
+        figsize=(11, 10),
+        sharex=True,
+        layout="constrained",
+    )
+
+    axes[0].plot(t_x, result["simX"][:, 3], label="Ego")
+    axes[0].axhline(
+        result["v_ref"],
+        color="black",
+        linestyle="--",
+        label="Reference",
+    )
+    axes[0].set_ylabel("Velocity [m/s]")
+
+    for k, metric in enumerate(result["metrics"]):
+        axes[1].plot(t_u, result["simV"][:, k], label=metric)
+        axes[2].plot(
+            t_u,
+            result["simHJResidual"][:, k],
+            label=metric,
+        )
+        axes[3].plot(
+            t_u,
+            result["simHJSlack"][:, k],
+            label=metric,
+        )
+
+        count = np.count_nonzero(result["simInsideGrid"][:, k])
+        print(f"{metric}: dentro griglia {count}/{len(t_u)}")
+
+    axes[1].set_ylabel("BRT value")
+    axes[2].set_ylabel("HJ residual")
+    axes[3].set_ylabel("Lower slack")
+    axes[3].set_xlabel("Time [s]")
+
+    for ax in axes:
+        ax.grid(True)
+        ax.legend()
+
+    axes[1].axhline(0.0, color="black", linestyle="--")
+    axes[2].axhline(0.0, color="black", linestyle="--")
+
+    plt.show()

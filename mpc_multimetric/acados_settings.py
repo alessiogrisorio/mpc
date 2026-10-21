@@ -44,7 +44,7 @@ K_V = 0.7
 K_OVERTAKE = 0.02
 
 
-def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
+def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None, n_metrics=1):
 
     if weights is None:
         weights = {
@@ -77,17 +77,12 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     # Variabili da aggiornare durante la simulazione
     X_H = SX.sym("X_H")
     Y_H = SX.sym("Y_H")
-    M1 = SX.sym("M1")
-    M2 = SX.sym("M2")
-    B_HJ = SX.sym("B_HJ")
-    model.p = vertcat(X_H, Y_H, M1, M2, B_HJ)
+    HJ = SX.sym("HJ", 3, n_metrics)
+    model.p = vertcat(X_H, Y_H, HJ.reshape((3*n_metrics, 1)))
     ocp.model = model
-    ocp.parameter_values = np.array([
-        human_pos[0],
-        human_pos[1],
-        0.0,   # M1
-        0.0,   # M2
-        1.0,   # B_HJ
+    ocp.parameter_values = np.concatenate([
+        np.asarray(human_pos, dtype=float),
+        np.tile([0.0, 0.0, 1.0], n_metrics)
     ])
 
 
@@ -154,7 +149,12 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     C_overtake = exp(-(Y_E - Y_H + K_OVERTAKE * (X_E - X_H)**2))
 
     # Vincolo HJ
-    hj_constraint = M1 * STEERING_RATE + M2 * ACCELERATION + B_HJ
+    hj_constraint = vertcat(*[
+        HJ[0, k] * STEERING_RATE
+        + HJ[1, k] * ACCELERATION
+        + HJ[2, k]
+        for k in range(n_metrics)
+    ])
 
     # Cost function
     ocp.cost.cost_type = "NONLINEAR_LS"
@@ -243,8 +243,8 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     model.con_h_expr_e = vertcat(street_bounds)
 
     # Limiti dei vincoli collisione e HJ
-    ocp.constraints.lh = np.concatenate([np.array([0.0]), np.full(4, ROAD_MIN)])
-    ocp.constraints.uh = np.concatenate([np.array([1e15]), np.full(4, ROAD_MAX)])
+    ocp.constraints.lh = np.concatenate([np.zeros(n_metrics), np.full(4, ROAD_MIN)])
+    ocp.constraints.uh = np.concatenate([np.full(n_metrics, 1e15), np.full(4, ROAD_MAX)])
 
     ocp.constraints.lh_0 = ocp.constraints.lh.copy()
     ocp.constraints.uh_0 = ocp.constraints.uh.copy()
@@ -254,14 +254,14 @@ def acados_settings(Tf, N, lf, lr, x0, v_ref, human_pos, weights=None):
     ocp.constraints.uh_e = np.full(4, ROAD_MAX)
 
     # Soft constraint su HJ, indice 4
-    ocp.constraints.idxsh = np.array([0])
-    ocp.constraints.idxsh_0 = np.array([0])
+    ocp.constraints.idxsh = np.arange(n_metrics, dtype=int)
+    ocp.constraints.idxsh_0 = ocp.constraints.idxsh.copy()
 
     # Penalità del soft constraint
-    ocp.cost.Zl = np.array([100.0])
-    ocp.cost.Zu = np.array([100.0])
-    ocp.cost.zl = np.array([100.0])
-    ocp.cost.zu = np.array([100.0])
+    ocp.cost.Zl = np.full(n_metrics, 100.0)
+    ocp.cost.Zu = np.full(n_metrics, 100.0)
+    ocp.cost.zl = np.full(n_metrics, 100.0)
+    ocp.cost.zu = np.full(n_metrics, 100.0)
     ocp.cost.Zl_0 = ocp.cost.Zl.copy()
     ocp.cost.Zu_0 = ocp.cost.Zu.copy()
     ocp.cost.zl_0 = ocp.cost.zl.copy()
