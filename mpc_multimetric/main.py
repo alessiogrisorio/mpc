@@ -66,12 +66,9 @@ def run_simulation(
     # Vehicle simulator
     sim = AcadosSim()
     sim.model = model
-    sim.parameter_values = np.array([
-        X_H_initial,
-        Y_H_initial,
-        0.0,
-        0.0,
-        1.0,
+    sim.parameter_values = np.concatenate([
+        human_pos,
+        np.tile([0.0, 0.0, 1.0], N_METRICS),
     ])
     sim.solver_options.T = dt
     sim.solver_options.integrator_type = "ERK"
@@ -151,6 +148,7 @@ def run_simulation(
             simV[i, k] = value
             simGradV[i, k] = gradient
             simInsideGrid[i, k] = inside
+            simHJActive[i, k] = inside
             if inside:
                 M_HJ[k], b_HJ[k] = hj_coefficients(relative_state, gradient, brt.dynamics_parameters)
                 b_HJ[k] += ALPHA_HJ * value
@@ -356,11 +354,7 @@ def run_simulation(
         "metrics": METRICS.copy(),
     }
 
-#if __name__ == "__main__":
-    run_simulation(
-        make_plots=False,
-        make_animation=True,
-    )
+
 
 if __name__ == "__main__":
     result = run_simulation(
