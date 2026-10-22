@@ -1,20 +1,21 @@
 import time
-from datetime import datetime
 
 import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
 from acados_settings import acados_settings, LANE_CENTER_1
-from animation import animate_simulation, plot_results, OcpCostDiagnostics, hj_prediction_diagnostics, COST_GROUPS
+from animation import COST_GROUPS, OcpCostDiagnostics, export_results
 from pathlib import Path
 from brt_utils import BRTinterpolator, hj_coefficients
 from hj_diagnostics import HJDiagnostics
-import matplotlib.pyplot as plt
 
 # BRT parameters
-METRICS = ["euclidean", "dce", "ttc", "eggert"]
+METRICS = ["euclidean", "dce", "ttc", "eggert", "rss", "time_eggert"]
 ALPHA_HJ = 1.5
 HJ_STAGES = 3
+if not METRICS or len(METRICS) != len(set(METRICS)):
+    raise ValueError("METRICS deve essere non vuoto e senza duplicati")
+
 brt_dir = Path(__file__).resolve().parents[1] / "brt"
 brts = [BRTinterpolator(brt_dir / f"{metric}.npz") for metric in METRICS]
 N_METRICS = len(METRICS)
@@ -63,7 +64,7 @@ def run_simulation(
     )
     nx = model.x.rows()     # 5
     nu = model.u.rows()     # 2
-    cost_diagnostic = OcpCostDiagnostics(model, acados_solver, N, dt_ocp) if make_animation else None
+    cost_diagnostic = OcpCostDiagnostics(model, acados_solver, N, dt_ocp) if make_plots or make_animation else None
 
     # Vehicle simulator
     sim = AcadosSim()
@@ -115,10 +116,11 @@ def run_simulation(
     simHJSlack = np.zeros((Nsim, N_METRICS))
     simHJSlackUpper = np.zeros((Nsim, N_METRICS))
     simOcpCost = np.full(Nsim, np.nan) if make_plots or make_animation else None
-    simCostComponents = {name: np.full(Nsim, np.nan) for name in COST_GROUPS} if make_animation else None
-    simHJMinResidual = np.full(Nsim, np.nan) if make_animation else None
-    simHJMaxSlack = np.full(Nsim, np.nan) if make_animation else None
+    simCostComponents = {name: np.full(Nsim, np.nan) for name in COST_GROUPS} if make_plots or make_animation else None
     simX_pred = np.empty((Nsim, N + 1, nx)) if make_animation else None
+
+    if not 1 <= HJ_STAGES <= N:
+        raise ValueError("HJ_STAGES deve essere compreso tra 1 e N")
 
     hj_diagnostics = HJDiagnostics(
         metrics=METRICS,
@@ -280,132 +282,7 @@ def run_simulation(
 
 
 
-    ################################ 
-    # 
-    # 
-    # 
-    if simCostComponents is not None:
-        reconstructed_cost = sum(simCostComponents.values())
-        max_cost_error = np.max(np.abs(simOcpCost - reconstructed_cost))
-        print(
-            f"Maximum cost decomposition error: "
-            f"{max_cost_error:.6e}"
-        )
-    # 
-    # 
-    #  
-    diagnostics_data = hj_diagnostics.arrays()
-    contributions = hj_diagnostics.contributions()
-
-    residual_matches = np.allclose(
-        contributions["residual"][:, 0, :],
-        simHJResidual,
-        rtol=1e-8,
-        atol=1e-10,
-        equal_nan=True,
-    )
-
-    print(f"Residui HJ registrati correttamente: {residual_matches}")
-
-    if not residual_matches:
-        raise RuntimeError("Residui diagnostici diversi da quelli del main")
-
-    for k, metric in enumerate(METRICS):
-        active = diagnostics_data["active"][:, :, k]
-        violations = contributions["soft_violated"][:, :, k]
-
-        print(
-            f"{metric}: "
-            f"{np.count_nonzero(active)} condizioni attive, "
-            f"{np.count_nonzero(violations)} violazioni oltre tolleranza"
-        )
-
-
-    run_name = (
-        datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        + "_"
-        + "_".join(METRICS)
-    )
-
-    results_directory = Path(__file__).resolve().parent / "results"
-
-    diagnostics_path = hj_diagnostics.save(
-        results_directory / f"{run_name}_hj.npz"
-    )
-
-    np.savez_compressed(
-        results_directory / f"{run_name}_simulation.npz",
-        simX=simX,
-        simU=simU,
-        dt=dt,
-        v_ref=v_ref,
-        X_H_initial=X_H_initial,
-        Y_H_initial=Y_H_initial,
-        v_H=v_H,
-    )
-
-    print(f"Diagnostica salvata in: {diagnostics_path}")
-
-    if make_plots:
-        plot_results(
-            dt,
-            simX,
-            simU,
-            v_ref,
-            v_H,
-            simV,
-            simHJActive,
-        )
-        fig, ax = plt.subplots(
-            figsize=(10,4),
-            layout="constrained",
-        )
-        t_cost = np.arange(Nsim) * dt
-        ax.plot(
-            t_cost,
-            simOcpCost,
-            label="Total OCP cost",
-        )
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Cost")
-        ax.set_title("Optimal MPC cost")
-        ax.grid(True)
-        ax.legend()
-    animation = None
-    if make_animation:
-        t_x = np.arange(len(simX)) * dt
-        animation = animate_simulation(
-            t_x,
-            simX,
-            X_H_initial,
-            Y_H_initial,
-            v_H,
-            save=True,
-            simX_pred=simX_pred,
-            simU=simU,
-            v_ref=v_ref,
-            simV=simV,
-            simHJActive=simHJActive,
-            simHJResidual=simHJResidual,
-            simHJSlack=simHJSlack,
-            simHJSlackUpper=simHJSlackUpper,
-            simHJMinResidual=simHJMinResidual,
-            simHJMaxSlack=simHJMaxSlack,
-            simOcpCost=simOcpCost,
-            simCostComponents=simCostComponents,
-            brt=brt,
-        )
-    if make_plots or make_animation:
-        print(f"\nMean OCP solve time: {1e3 * solve_time.mean():.3f} ms")
-        print(f"Maximum OCP solve time: {1e3 * solve_time.max():.3f} ms")
-        print(
-            f"Stati dentro la griglia BRT: "
-            f"{simInsideGrid.sum()}/{Nsim}"
-        )
-        plt.close("all")
-    ################################
-
-    return {
+    result = {
         "success": True,
         "simX": simX,
         "simU": simU,
@@ -418,6 +295,7 @@ def run_simulation(
         "simHJSlack": simHJSlack,
         "simHJSlackUpper": simHJSlackUpper,
         "simOcpCost": simOcpCost,
+        "simCostComponents": simCostComponents or {},
         "solve_time": solve_time,
         "dt": dt,
         "v_ref": v_ref,
@@ -427,62 +305,21 @@ def run_simulation(
         "scenario": scenario,
         "metrics": METRICS.copy(),
         "hj_diagnostic": hj_diagnostics,
-        "diagnostics_path": diagnostics_path,
     }
 
+    result.update(export_results(
+        result,
+        hj_diagnostics,
+        make_plots=make_plots,
+        make_animation=make_animation,
+        brts=dict(zip(METRICS, brts)),
+    ))
+    return result
 
 
 if __name__ == "__main__":
     result = run_simulation(
-        make_plots=False,
-        make_animation=False,
+        make_plots=True,
+        make_animation=True,
     )
 
-    t_x = np.arange(len(result["simX"])) * result["dt"]
-    t_u = np.arange(len(result["simU"])) * result["dt"]
-
-    fig, axes = plt.subplots(
-        4, 1,
-        figsize=(11, 10),
-        sharex=True,
-        layout="constrained",
-    )
-
-    axes[0].plot(t_x, result["simX"][:, 3], label="Ego")
-    axes[0].axhline(
-        result["v_ref"],
-        color="black",
-        linestyle="--",
-        label="Reference",
-    )
-    axes[0].set_ylabel("Velocity [m/s]")
-
-    for k, metric in enumerate(result["metrics"]):
-        axes[1].plot(t_u, result["simV"][:, k], label=metric)
-        axes[2].plot(
-            t_u,
-            result["simHJResidual"][:, k],
-            label=metric,
-        )
-        axes[3].plot(
-            t_u,
-            result["simHJSlack"][:, k],
-            label=metric,
-        )
-
-        count = np.count_nonzero(result["simInsideGrid"][:, k])
-        print(f"{metric}: dentro griglia {count}/{len(t_u)}")
-
-    axes[1].set_ylabel("BRT value")
-    axes[2].set_ylabel("HJ residual")
-    axes[3].set_ylabel("Lower slack")
-    axes[3].set_xlabel("Time [s]")
-
-    for ax in axes:
-        ax.grid(True)
-        ax.legend()
-
-    axes[1].axhline(0.0, color="black", linestyle="--")
-    axes[2].axhline(0.0, color="black", linestyle="--")
-
-    plt.show()
