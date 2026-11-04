@@ -4,7 +4,7 @@ import numpy as np
 
 from acados_template import AcadosSim, AcadosSimSolver
 from acados_settings import acados_settings, LANE_CENTER_1
-from animation import COST_GROUPS, OcpCostDiagnostics, export_results
+from animation_thesis import COST_GROUPS, OcpCostDiagnostics, export_results
 from pathlib import Path
 from brt_utils import BRTinterpolator, hj_coefficients
 from hj_diagnostics import HJDiagnostics
