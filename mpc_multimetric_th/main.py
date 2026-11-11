@@ -10,7 +10,9 @@ from brt_utils import BRTinterpolator, hj_coefficients
 from hj_diagnostics import HJDiagnostics
 
 # BRT parameters
-METRICS = ["mixed"]
+#METRICS = ["euclidean", "dce", "btn", "stn", "long_lat"]
+#METRICS = ["ttc", "time_eggert"]
+METRICS = ["euclidean", "dce", "btn", "stn", "long_lat", "ttc", "time_eggert", "rss", "eggert"]
 ALPHA_HJ = 1.5
 HJ_STAGES = 3
 if not METRICS or len(METRICS) != len(set(METRICS)):
