@@ -1,0 +1,2 @@
+run,timer,samples,mean_ms,median_ms,p95_ms,p99_ms,max_ms,deadline_ms,within_deadline_pct,deadline_misses
+euclidean,OCP solver,1000,103.59190248704545,25.48458700039191,208.48953044987866,442.9142352253256,695.8219420048408,20.0,49.7,503

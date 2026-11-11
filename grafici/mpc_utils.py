@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon, Rectangle
+from matplotlib.ticker import FormatStrFormatter
 
 from plot_utils import set_style, export_figure
 
@@ -189,13 +190,15 @@ def _rectangle(ax, state, length, width, color):
                          facecolor=color, edgecolor='black', linewidth=1.0, zorder=4))
 
 
-def plot_frames(run, times=(5, 7, 9, 11), behind=10., ahead=25., prediction=True):
+def plot_frames(run, times=(5, 7, 9, 11), behind=10., ahead=25., prediction=True, ncols=1):
     if not len(times) or behind < 0 or ahead <= 0:
         raise ValueError('Tempi non vuoti e finestra spaziale valida richiesti.')
     if any(t < run.time[0] or t > run.time[-1] for t in times):
         raise ValueError(f'Tempi dei frame fuori dalla simulazione {run.name}.')
-    fig, panels = plt.subplots(len(times), 1, figsize=(10, 1.65*len(times)), squeeze=False)
-    for ax, requested in zip(panels[:, 0], times):
+    nrows = int(np.ceil(len(times)/ncols))
+    fig, panels = plt.subplots(nrows, ncols, figsize=(10*ncols, 3*nrows), squeeze=False)
+    axes = panels.ravel()
+    for ax, requested in zip(axes, times):
         i = int(np.argmin(abs(run.time-requested)))
         time = run.time[i]
         state = run.sim['simX'][i]
@@ -223,7 +226,11 @@ def plot_frames(run, times=(5, 7, 9, 11), behind=10., ahead=25., prediction=True
             ax.legend(loc='lower left', bbox_to_anchor=(0.18, 1.0), frameon=False)
         for spine in ax.spines.values():
             spine.set_visible(False)
-    panels[-1, 0].set_xlabel(r'$X\ [\mathrm{m}]$')
+    for ax in axes[:len(times)]:
+        ax.set_xlabel(r'$X\ [\mathrm{m}]$')
+
+    for ax in axes[len(times):]:
+        ax.set_visible(False)
     return fig
 
 
@@ -254,7 +261,7 @@ def plot_commands(runs):
 
 
 def plot_values(run, metrics=None):
-    fig, ax = plt.subplots(figsize=(9, 4))
+    fig, ax = plt.subplots(figsize=(6, 3))
     for metric in _selected_metrics(run, metrics):
         k = run.metrics.index(metric)
         values = np.where(run.hj['active'][:, 0, k], run.hj['V'][:, k], np.nan)
@@ -266,6 +273,8 @@ def plot_values(run, metrics=None):
         ax.legend(loc='upper left', bbox_to_anchor=(1.01, 1))
     else:
         ax.legend(loc='best')
+    ax.grid(True, which="major", color="gray", alpha=0.2, linewidth=0.6)
+    ax.set_axisbelow(True)
     return fig
 
 
@@ -291,12 +300,16 @@ def _hj_window(run, stage=0, padding=1):
             min(run.input_time[-1], run.input_time[available[-1]]+run.dt+padding))
 
 
-def plot_hj_limits(run, metric=None, stage=0, softened=False, padding=1):
+def plot_hj_limits(run, metric=None, stage=0, softened=False, padding=1, command=None):
     if not 0 <= stage < run.diagnostic.stages:
         raise ValueError('Stage HJ non valido.')
     bounds = run.diagnostic.compute_limits(softened=softened)
-    fig, axes = plt.subplots(2, 1, figsize=(9, 6), sharex=True)
-    for axis, (ax, name) in enumerate(zip(axes, ('steering_rate', 'acceleration'))):
+    commands = ("steering_rate", "acceleration")
+    selected = [0, 1] if command is None else [commands.index(command)]
+    fig, panels = plt.subplots(len(selected), 1, figsize=(9, 3.5 * len(selected)), sharex=True, squeeze=False)
+    axes = panels[:, 0]
+    for ax, axis in zip(axes, selected):
+        name = commands[axis]
         data = bounds[name]
         if metric is None:
             lower, upper = data['lower'][:, stage], data['upper'][:, stage]
@@ -327,13 +340,26 @@ def plot_hj_limits(run, metric=None, stage=0, softened=False, padding=1):
                 color='tab:blue', label='MPC command')
         ax.axhline(run.diagnostic.u_lower[axis], color='tab:red', linestyle='--', label='Physical bounds')
         ax.axhline(run.diagnostic.u_upper[axis], color='tab:red', linestyle='--')
+        ax.grid(True, which="major", color="gray", alpha=0.2, linewidth=0.6)
+        ax.set_axisbelow(True)
         if np.any(active & ~feasible):
             ax.fill_between(run.input_time, run.diagnostic.u_lower[axis],
                             run.diagnostic.u_upper[axis], where=active & ~feasible,
                             color='tab:red', alpha=.12, label='Empty HJ interval')
         ax.set_ylabel(INPUT_LABELS[axis])
+        if axis == 0:
+            ax.set_yticks([-0.087, -0.04, 0, 0.04, 0.087])
+            ax.yaxis.set_major_formatter(FormatStrFormatter("%.3f"))
+        else:
+            ax.set_yticks([-7, -5, -3, -1, 0, 2.5])
+            ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
+        ax.tick_params(axis="y", which="both", length=0)
         ax.set_xlim(_hj_window(run, stage, padding))
-    axes[0].legend(loc='upper left', bbox_to_anchor=(1.01, 1))
+    entries = {}
+    for ax in axes:
+        handles, labels = ax.get_legend_handles_labels()
+        entries.update(zip(labels, handles))
+    fig.legend(entries.values(), entries.keys(), loc="outside upper center", ncol=2, frameon=False,)
     axes[-1].set_xlabel(r'$t\ [\mathrm{s}]$')
     return fig
 
@@ -368,14 +394,18 @@ def plot_command_planes(run, times=None, stage=0, softened=False):
                 ax.axvline(-b/M[0], color=PALETTE.get(metric), label=LABELS.get(metric, metric))
         ax.scatter(*run.hj['u'][i, stage], color='tab:blue', zorder=5, s=25)
         ax.set_xlim(lo[0]-.005, hi[0]+.005)
+        ax.set_xticks([-0.087, 0, 0.087])
         ax.set_ylim(lo[1]-.25, hi[1]+.25)
+        ax.set_yticks([-7, -5, -3, 0, 2.5])
+        ax.grid(True, which="major", color="gray", alpha=0.2, linewidth=0.6)
+        ax.set_axisbelow(True)
         ax.set_xlabel(INPUT_LABELS[0])
         ax.set_ylabel(INPUT_LABELS[1])
         ax.set_title(rf'$t={run.input_time[i]:.2f}\,\mathrm{{s}}$')
     handles = [Line2D([], [], color=PALETTE.get(m), label=LABELS.get(m, m)) for m in run.metrics]
     handles += [Line2D([], [], color='tab:red', linestyle='--', label='Physical bounds'),
                 Line2D([], [], color='tab:blue', marker='o', linestyle='none', label='MPC command')]
-    fig.legend(handles=handles, loc='outside upper center', ncol=min(4, len(handles)))
+    fig.legend(handles=handles, loc='outside upper center', ncol=min(4, len(handles)), frameon=False)
     return fig
 
 

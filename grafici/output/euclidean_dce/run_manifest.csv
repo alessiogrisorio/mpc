@@ -1,0 +1,3 @@
+run,metrics,duration_s,dt_s,steps,predictions,costs,recorded_timers
+euclidean,euclidean,20.0,0.02,1000,True,True,solve_time
+dce,dce,20.0,0.02,1000,True,True,solve_time

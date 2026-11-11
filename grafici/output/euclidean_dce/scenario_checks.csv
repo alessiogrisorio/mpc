@@ -1,0 +1,7 @@
+run,quantity,same_as_reference
+dce,dt,True
+dce,v_ref,True
+dce,v_H,True
+dce,X_H_initial,True
+dce,Y_H_initial,True
+dce,initial_ego_state,True
