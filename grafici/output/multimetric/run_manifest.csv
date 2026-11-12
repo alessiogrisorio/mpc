@@ -1,0 +1,4 @@
+run,metrics,duration_s,dt_s,steps,predictions,costs,recorded_timers
+multi_space,"euclidean, dce, btn, stn, long_lat",20.0,0.02,1000,True,True,solve_time
+multi_time,"ttc, time_eggert",20.0,0.02,1000,True,True,solve_time
+multi_all,"euclidean, dce, btn, stn, long_lat, ttc, time_eggert, rss, eggert",20.0,0.02,1000,True,True,solve_time

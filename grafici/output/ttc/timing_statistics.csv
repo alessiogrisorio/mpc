@@ -1,0 +1,2 @@
+run,timer,samples,mean_ms,median_ms,p95_ms,p99_ms,max_ms,deadline_ms,within_deadline_pct,deadline_misses
+ttc,OCP solver,1000,111.90246431226842,87.08594599738717,221.87809449096676,455.20633326028474,518.1994519662112,20.0,45.6,544

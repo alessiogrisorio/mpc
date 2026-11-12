@@ -279,16 +279,42 @@ def plot_values(run, metrics=None):
 
 
 def plot_values_comparison(runs):
-    # Pannelli separati: scale diverse non vengono normalizzate arbitrariamente.
-    fig, axes = plt.subplots(len(runs), 1, figsize=(9, 3*len(runs)), sharex=True, squeeze=False)
-    for ax, run in zip(axes[:, 0], runs):
+    fig, ax = plt.subplots(figsize=(7, 3.2))
+
+    for run in runs:
         for k, metric in enumerate(run.metrics):
-            value = np.where(run.hj['active'][:, 0, k], run.hj['V'][:, k], np.nan)
-            ax.plot(run.input_time, value, color=PALETTE.get(metric), label=LABELS.get(metric, metric))
-        ax.axhline(0, color='black', linestyle='--', linewidth=0.9)
-        ax.set_ylabel(r'$V$')
-        ax.legend()
-    axes[-1, 0].set_xlabel(r'$t\ [\mathrm{s}]$')
+            values = np.where(
+                run.hj["active"][:, 0, k],
+                run.hj["V"][:, k],
+                np.nan,
+            )
+
+            ax.plot(
+                run.input_time,
+                values,
+                color=PALETTE.get(metric),
+                label=LABELS.get(metric, metric),
+            )
+
+    ax.axhline(0, color="black", linestyle="--", linewidth=0.9)
+
+    ax.set_xlabel(r"$t\ [\mathrm{s}]$")
+    ax.set_ylabel(r"$V$")
+
+    ax.grid(True, which="major", color="gray", alpha=0.2, linewidth=0.6)
+    ax.set_axisbelow(True)
+
+    handles, labels = ax.get_legend_handles_labels()
+    entries = dict(zip(labels, handles))
+
+    fig.legend(
+        entries.values(),
+        entries.keys(),
+        loc="outside upper center",
+        ncol=min(4, len(entries)),
+        frameon=False,
+    )
+
     return fig
 
 
